@@ -39,4 +39,4 @@ scripts/build-shortcuts.sh --open
 
 - 文字裡的 U+FFFC（￼）是變數佔位字元，`attachmentsByRange` 的範圍是它在字串裡的位置。
 - `WFWorkflowImportQuestions` 的 `ActionIndex` 指動作陣列的索引，插入或刪除動作時要跟著改。
-- 「捷徑輸入」不能直接塞進文字：Safari 的分享會把同一頁傳成兩個項目，直接串接會變成「網址網址」。所以先「從輸入取得 URL」再「取第一個項目」。
+- 「捷徑輸入」不能直接塞進文字：Safari 的分享會把同一頁傳成兩個項目（都能轉成網址），直接串接會變成「網址網址」，所以先「取第一個項目」。「從輸入取得 URL」對這種輸入會回空值，不要用。
