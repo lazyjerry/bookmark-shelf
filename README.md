@@ -17,6 +17,7 @@
 - **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。設定介面目前隱藏，API 仍可使用。
 - **PWA**：可安裝到桌面或手機主畫面；Android 可從其他 App「分享」網址直接新增。
 - **通知信**：新增書籤時，寄網站資料（標題、網址、網站、分類、標籤、縮圖）與摘要給設定頁指定的收件人。走 Cloudflare Email Routing，只寄得到已驗證的收件地址。
+- **書籤中轉頁**：列表點開書籤時另開分頁到 `/b/<share_id>`，顯示該網站的資料，再按「前往網站」開原網址。這個網址不需登入即可瀏覽，可直接分享；登入時多了登入名稱、返回、編輯與刪除。「分享」可複製網址，或產生一張書籤分享圖（有縮圖、沒縮圖各有版面）儲存或分享。
 
 ## 部署
 
@@ -111,9 +112,12 @@ npm run typecheck
   npx wrangler d1 execute DB --remote --command "DELETE FROM passkeys; DELETE FROM sessions"
   ```
 
+- 書籤中轉頁 `/b/<share_id>`、`/api/share/<share_id>`、`view.html`／`view.js`／`view.css` 不需登入。`share_id` 是 96 位元亂數，不用遞增的 id，網址猜不到、也無法逐號列舉；拿到網址的人就看得到該筆書籤。未登入時只回傳公開欄位，不含備註、點擊數與內部 id，「前往網站」直接開原網址、不記點擊。
+- 分享圖在瀏覽器以 Canvas 繪製。縮圖經 `/api/share/<share_id>/thumbnail` 由 Worker 轉送（跨站圖片會讓 Canvas 無法匯出），只轉該筆書籤自己的縮圖、只接受 PNG／JPEG／GIF／WebP／AVIF、上限 5 MB，不是開放代理。
+
 ## API
 
-除了 `/api/auth/*` 之外都需登入：程式呼叫帶 Basic Auth，瀏覽器用登入頁換到的 Session Cookie。寫入請求需帶 `Content-Type: application/json`。
+除了 `/api/auth/*` 與 `/api/share/*` 之外都需登入：程式呼叫帶 Basic Auth，瀏覽器用登入頁換到的 Session Cookie。寫入請求需帶 `Content-Type: application/json`。
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
@@ -123,6 +127,9 @@ npm run typecheck
 | `GET` `PATCH` `DELETE` | `/api/bookmarks/:id` | 讀取、更新（`title`、`summary`、`category`、`tags`、`note`、`thumbnail`）、刪除 |
 | `GET` | `/api/overview` | 首頁區塊資料 |
 | `GET` | `/go/:id` | 記錄點擊後轉址 |
+| `GET` | `/b/:share_id` | 書籤中轉頁（免登入） |
+| `GET` | `/api/share/:share_id` | 中轉頁資料：未登入只回公開欄位與 `owner: false`；登入時回完整書籤、`owner: true` 與 `viewer.name`（免登入） |
+| `GET` | `/api/share/:share_id/thumbnail` | 轉送該筆書籤的縮圖，給分享圖使用（免登入） |
 | `GET` `POST` | `/api/webhooks` | 列出、新增 webhook |
 | `PATCH` `DELETE` | `/api/webhooks/:id` | 更新、刪除 webhook |
 | `POST` | `/api/webhooks/:id/test` | 以最新一筆書籤實際呼叫一次 |
@@ -230,6 +237,7 @@ python3 scripts/generate-icons.py
 ├── migrations/0001_init.sql    D1 資料表
 ├── migrations/0002_settings.sql 個人設定
 ├── migrations/0003_sessions_passkeys.sql 登入 Session、Passkey、WebAuthn challenge
+├── migrations/0004_share_id.sql 中轉頁網址用的 share_id
 ├── migrations/0005_drop_auth_settings.sql 清掉舊版設定頁存的登入帳密
 ├── public/                     前端頁面、PWA manifest、Service Worker、圖示
 ├── scripts/generate-icons.py   產生 PWA 圖示
@@ -246,6 +254,7 @@ python3 scripts/generate-icons.py
 │   ├── settings.ts             個人設定、登入帳密驗證
 │   ├── session.ts              瀏覽器登入的 Session Cookie
 │   ├── passkeys.ts             Passkey（WebAuthn）註冊與驗證
+│   ├── share.ts                書籤中轉頁的公開欄位、og meta 與縮圖轉送
 │   └── extractors/             網域擴充器
 └── wrangler.jsonc
 ```

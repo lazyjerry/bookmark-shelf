@@ -18,6 +18,7 @@ import {
   authenticatePasskey, authenticationOptions, deletePasskey, listPasskeys, PasskeyError, registerPasskey, registrationOptions,
 } from './passkeys';
 import { countSessions, createSession, destroyOtherSessions, destroySession, readSession, renewSession } from './session';
+import { findShared, publicBookmark, thumbnailResponse, viewPage } from './share';
 
 /** sessionId：以 Session Cookie 登入時才有，Basic Auth 呼叫沒有 */
 type AppEnv = { Bindings: Env; Variables: { sessionId?: string } };
@@ -68,7 +69,7 @@ async function latestOrSample(db: D1Database): Promise<Bookmark> {
   const now = new Date().toISOString();
   return {
     id: 0, url: 'https://example.com/', title: '範例書籤', summary: '這是測試資料。', category: '測試', note: '', tags: ['測試'],
-    thumbnail: '', favicon: '', site: 'example.com', host: 'example.com', extra: {}, click_count: 0, created_at: now, updated_at: now, last_clicked_at: null,
+    thumbnail: '', favicon: '', site: 'example.com', host: 'example.com', extra: {}, click_count: 0, created_at: now, updated_at: now, last_clicked_at: null, share_id: '',
   };
 }
 
@@ -80,7 +81,9 @@ app.use('*', async (c, next) => {
 });
 
 // PWA 需要的靜態檔不含資料，開放免登入：瀏覽器抓 manifest 與圖示時預設不帶認證，擋住會無法安裝。登入頁與其腳本同樣免登入
-const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/sw.js', '/offline.html', '/favicon.svg', '/app.css', '/app.js', '/login', '/login.js', '/passkey.js']);
+const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/sw.js', '/offline.html', '/favicon.svg', '/app.css', '/app.js', '/login', '/login.js', '/passkey.js', '/view.css', '/view.js']);
+// 書籤中轉頁與它的 API 免登入，網址裡的 share_id 不可猜；是否登入由路由自己讀 Session 判斷
+const SHARE_PATH = /^\/(b|api\/share)\/[^/]+(\/thumbnail)?$/;
 // 登入頁呼叫的 API（POST），尚未登入也要能用
 const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/passkey/options', '/api/auth/passkey', '/api/auth/logout']);
 
@@ -89,6 +92,7 @@ const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/passkey/options', '/ap
 app.use('*', async (c, next) => {
   if (c.req.method === 'GET' && (PUBLIC_PATHS.has(c.req.path) || c.req.path.startsWith('/icons/'))) return next();
   if (c.req.method === 'POST' && AUTH_PATHS.has(c.req.path)) return next();
+  if (c.req.method === 'GET' && SHARE_PATH.test(c.req.path)) return next();
 
   const session = await readSession(c);
   if (session) {
@@ -200,6 +204,26 @@ app.delete('/api/bookmarks/:id', async (c) => {
   await deleteBookmark(c.env.DB, id);
   emit(c, 'bookmark.deleted', bookmark);
   return c.json({ ok: true });
+});
+
+// 書籤中轉頁：列表點開書籤先到這裡，未登入也能瀏覽（auth middleware 以 SHARE_PATH 放行）
+app.get('/b/:shareId', async (c) => {
+  const page = await c.env.ASSETS.fetch(new URL('/view', c.req.url));
+  return viewPage(page, await findShared(c.env.DB, c.req.param('shareId')));
+});
+
+// 未登入只回公開欄位；登入時回完整書籤與登入名稱，頁面才顯示編輯與返回
+app.get('/api/share/:shareId', async (c) => {
+  const bookmark = await findShared(c.env.DB, c.req.param('shareId'));
+  if (!bookmark) return c.json({ error: '找不到這筆書籤，可能已被刪除' }, 404);
+  if (!(await readSession(c))) return c.json({ bookmark: publicBookmark(bookmark), owner: false });
+  const [settings, creds] = await Promise.all([getSettings(c.env.DB, ['profile_name']), loadCredentials(c.env)]);
+  return c.json({ bookmark, owner: true, viewer: { name: settings.profile_name || creds?.username || '' } });
+});
+
+app.get('/api/share/:shareId/thumbnail', async (c) => {
+  const bookmark = await findShared(c.env.DB, c.req.param('shareId'));
+  return bookmark ? thumbnailResponse(bookmark) : c.text('找不到書籤', 404);
 });
 
 // 列表上的連結都經過這裡，用來記錄最近點擊

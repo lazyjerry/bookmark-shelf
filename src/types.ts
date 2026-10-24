@@ -54,4 +54,6 @@ export interface Bookmark {
   created_at: string;
   updated_at: string;
   last_clicked_at: string | null;
+  /** 中轉頁網址 /b/<share_id> 的亂數，未登入也能瀏覽 */
+  share_id: string;
 }

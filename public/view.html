@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#171e34">
+  <title>書籤收藏櫃</title>
+  <!-- 以下 meta 由 Worker 依書籤內容改寫，貼到通訊軟體時才有預覽卡 -->
+  <meta name="description" content="">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="書籤收藏櫃">
+  <meta property="og:description" content="">
+  <meta property="og:image" content="">
+  <link rel="icon" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/view.css">
+  <script src="/view.js" defer></script>
+</head>
+<body class="view-page">
+  <header class="site-header">
+    <div class="topbar">
+      <div class="view-owner">
+        <span class="brand"><span class="brand-mark">B</span><span>BOOKMARK SHELF</span></span>
+        <span class="status-pill" id="viewer" hidden><i></i><span id="viewer-name"></span></span>
+      </div>
+      <div class="view-actions">
+        <button type="button" class="ghost" id="back" hidden>← 返回</button>
+        <button type="button" class="ghost" id="edit" hidden>編輯</button>
+        <button type="button" id="share" hidden>分享</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="view-main">
+    <output id="view-status" aria-live="polite">載入中…</output>
+
+    <article class="tool-card view-card" id="view-card" hidden>
+      <a class="view-cover" id="view-cover" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true"></a>
+      <div class="view-body">
+        <p class="eyebrow" id="view-eyebrow"></p>
+        <div class="view-site"><span id="view-fav"></span><span id="view-host"></span></div>
+        <h1 class="view-title" id="view-title"></h1>
+        <a class="view-url" id="view-url" target="_blank" rel="noopener noreferrer"></a>
+        <p class="view-summary" id="view-summary"></p>
+        <div class="chips" id="view-tags"></div>
+        <p class="bm-note" id="view-note" hidden></p>
+        <p class="view-meta" id="view-meta"></p>
+        <a class="view-open" id="view-open" target="_blank" rel="noopener noreferrer">前往網站 ↗</a>
+      </div>
+    </article>
+  </main>
+
+  <dialog id="share-dialog" aria-labelledby="share-title">
+    <form method="dialog">
+      <h2 id="share-title">分享書籤</h2>
+      <label for="share-url">網址（不需登入即可瀏覽）</label>
+      <div class="field-inline">
+        <input id="share-url" readonly>
+        <button type="button" id="share-copy">複製</button>
+      </div>
+      <button type="button" class="ghost" id="share-link" hidden>用其他 App 分享網址</button>
+      <label>分享圖</label>
+      <div class="share-preview" id="share-preview"><p class="empty">產生中…</p></div>
+      <p class="hint">手機也可以長按圖片儲存。</p>
+      <div class="actions">
+        <a class="button-link" id="share-save" download hidden>儲存圖片</a>
+        <button type="button" class="ghost" id="share-image" hidden>分享圖片</button>
+        <button type="button" class="ghost" id="share-close">關閉</button>
+      </div>
+      <output id="share-status" aria-live="polite"></output>
+    </form>
+  </dialog>
+
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form" method="dialog">
+      <h2 id="edit-title">編輯書籤</h2>
+      <p class="dialog-url" id="edit-url"></p>
+      <label for="edit-title-input">標題</label>
+      <input id="edit-title-input" maxlength="300" required>
+      <label for="edit-summary">摘要</label>
+      <textarea id="edit-summary" rows="4" maxlength="2000"></textarea>
+      <div class="field-row">
+        <div><label for="edit-category">分類</label><input id="edit-category" list="category-options" maxlength="40"></div>
+        <div><label for="edit-tags">標籤（以逗號分隔）</label><input id="edit-tags" list="tag-options"></div>
+      </div>
+      <label for="edit-thumbnail">縮圖網址</label>
+      <input id="edit-thumbnail" type="url" inputmode="url">
+      <label for="edit-note">備註</label>
+      <textarea id="edit-note" rows="3" maxlength="5000"></textarea>
+      <div class="actions">
+        <button type="submit" value="save">儲存</button>
+        <button type="button" class="danger" id="edit-delete">刪除</button>
+        <button type="button" class="ghost" id="edit-close">關閉</button>
+      </div>
+      <output id="edit-status" aria-live="polite"></output>
+    </form>
+  </dialog>
+
+  <datalist id="category-options"></datalist>
+  <datalist id="tag-options"></datalist>
+
+  <footer class="view-footer">書籤收藏櫃<span>·</span>Cloudflare Workers<span>·</span>D1<span>·</span>Workers AI</footer>
+</body>
+</html>

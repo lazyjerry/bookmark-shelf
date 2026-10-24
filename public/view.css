@@ -1,0 +1,62 @@
+/* 書籤中轉頁（/b/<share_id>）：沿用 app.css 的色票與元件，只補版面 */
+.view-page .topbar { max-width: 960px; }
+.view-owner { min-width: 0; display: flex; align-items: center; gap: 14px; }
+.view-owner .status-pill span { max-width: 32vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.view-actions { display: flex; gap: 8px; margin-left: auto; }
+.view-actions button { min-height: 40px; padding: 0 16px; }
+
+.view-main { max-width: 960px; margin-inline: auto; padding: 38px 24px 0; }
+.view-main > output { margin-bottom: 20px; }
+
+.view-card { padding: 0; }
+.view-cover { display: block; aspect-ratio: 1200 / 630; overflow: hidden; background: #e9e7e0; border-bottom: 1px solid var(--line); }
+.view-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* 沒有縮圖：改用方格底＋網站首字，不留一大塊灰底 */
+.view-card.no-image .view-cover {
+  aspect-ratio: auto; height: 168px; display: flex; align-items: center; padding: 0 38px; text-decoration: none;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(rgba(23, 30, 52, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 30, 52, .07) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.view-mono { width: 96px; height: 96px; display: grid; place-items: center; color: white; background: var(--accent); border-radius: 50%; font: 900 44px/1 monospace; box-shadow: 5px 5px 0 rgba(23, 30, 52, .14); }
+
+.view-body { display: flex; flex-direction: column; gap: 14px; padding: 34px 38px 38px; }
+.view-body .eyebrow { margin: 0; }
+.view-site { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.view-title { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.25; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.view-card.no-image .view-title { font-size: clamp(32px, 5vw, 56px); }
+.view-url { color: var(--muted); font: 12px/1.5 monospace; word-break: break-all; text-decoration: none; }
+.view-url:hover { color: var(--accent); text-decoration: underline; }
+.view-summary { margin: 4px 0; padding: 4px 0 4px 20px; color: #444a5c; border-left: 5px solid var(--coral); font-size: 16px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.view-summary:empty { display: none; }
+.view-body .chips .chip { cursor: default; }
+.view-body .chips .chip:hover { color: var(--navy); background: white; border-color: var(--field); }
+.view-body .bm-note { font-size: 14px; }
+.view-meta { margin: 0; color: var(--muted); font: 12px/1.5 monospace; }
+
+/* 連結做成按鈕外觀：前往網站、儲存圖片 */
+.view-open, .button-link { min-height: 46px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; color: white; background: var(--navy); border: 1px solid var(--navy); font-weight: 800; text-decoration: none; transition: transform .12s, background .12s; }
+.view-open:hover, .button-link:hover { background: var(--accent); border-color: var(--accent); transform: translateY(-2px); }
+.view-open { align-self: flex-start; min-height: 54px; margin-top: 8px; padding: 0 28px; font-size: 16px; }
+.actions .button-link { flex: 1; }
+
+/* 分享對話框 */
+#share-dialog { --accent: var(--coral); border-top-color: var(--coral); }
+#share-dialog .field-inline input { font: 13px/1.4 monospace; }
+.share-preview { min-height: 120px; max-height: 52vh; display: grid; place-items: center; overflow: auto; background: #e9e7e0; border: 1px solid var(--line); }
+.share-preview img { display: block; width: 100%; height: auto; }
+
+.view-footer { max-width: 960px; }
+
+@media (max-width: 760px) {
+  .view-main { padding: 22px 16px 0; }
+  .view-actions { gap: 6px; }
+  .view-actions button { min-height: 38px; padding: 0 12px; font-size: 14px; }
+  .view-card.no-image .view-cover { height: 128px; padding: 0 22px; }
+  .view-mono { width: 72px; height: 72px; font-size: 34px; }
+  .view-body { gap: 12px; padding: 22px 20px 26px; }
+  .view-summary { padding-left: 14px; font-size: 15px; }
+  .view-open { align-self: stretch; }
+}

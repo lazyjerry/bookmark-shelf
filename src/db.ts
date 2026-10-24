@@ -58,6 +58,16 @@ export async function getBookmark(db: D1Database, id: number): Promise<Bookmark 
   return row ? toBookmark(row) : null;
 }
 
+/** 96 位元亂數，格式與 0004 migration 補值的 lower(hex(randomblob(12))) 相同 */
+function newShareId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function getBookmarkByShareId(db: D1Database, shareId: string): Promise<Bookmark | null> {
+  const row = await db.prepare(`${SELECT_BOOKMARK} WHERE b.share_id = ?`).bind(shareId).first<Row>();
+  return row ? toBookmark(row) : null;
+}
+
 export async function findIdByUrl(db: D1Database, url: string): Promise<number | null> {
   const row = await db.prepare('SELECT id FROM bookmarks WHERE url = ?').bind(url).first<{ id: number }>();
   return row?.id ?? null;
@@ -69,11 +79,11 @@ export async function insertBookmark(db: D1Database, input: BookmarkInput): Prom
   const statements = [
     db
       .prepare(
-        `INSERT INTO bookmarks (url, title, summary, category, note, thumbnail, favicon, site, host, extra, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO bookmarks (url, title, summary, category, note, thumbnail, favicon, site, host, extra, created_at, updated_at, share_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(input.url, input.title, input.summary, input.category, input.note, input.thumbnail, input.favicon,
-        input.site, input.host, JSON.stringify(input.extra), now, now),
+        input.site, input.host, JSON.stringify(input.extra), now, now, newShareId()),
     ...input.tags.map((tag) =>
       db.prepare('INSERT INTO bookmark_tags (bookmark_id, tag) SELECT id, ? FROM bookmarks WHERE url = ?').bind(tag, input.url),
     ),

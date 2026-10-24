@@ -102,7 +102,7 @@
   function thumbBox(bookmark, link) {
     const fallback = (bookmark.site || bookmark.host || '?').slice(0, 1).toUpperCase();
     const box = link
-      ? h('a', { class: 'thumb', href: `/go/${bookmark.id}`, target: '_blank', rel: 'noopener', 'aria-hidden': 'true', tabindex: '-1' })
+      ? h('a', { class: 'thumb', href: `/b/${bookmark.share_id}`, target: '_blank', rel: 'noopener', 'aria-hidden': 'true', tabindex: '-1' })
       : h('div', { class: 'thumb' });
     if (bookmark.thumbnail) {
       const img = h('img', { src: bookmark.thumbnail, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
@@ -144,7 +144,7 @@
           filterButton('site', bookmark.site),
           bookmark.category ? ['·', filterButton('category', bookmark.category)] : null,
         ),
-        h('h3', {}, h('a', { href: `/go/${bookmark.id}`, target: '_blank', rel: 'noopener' }, bookmark.title || bookmark.url)),
+        h('h3', {}, h('a', { href: `/b/${bookmark.share_id}`, target: '_blank', rel: 'noopener' }, bookmark.title || bookmark.url)),
         bookmark.summary ? h('p', { class: 'bm-summary' }, bookmark.summary) : null,
         bookmark.note ? h('p', { class: 'bm-note' }, bookmark.note) : null,
         bookmark.tags.length
@@ -162,7 +162,7 @@
     state.cache.set(bookmark.id, bookmark);
     return h('li', {},
       favicon(bookmark),
-      h('a', { href: `/go/${bookmark.id}`, target: '_blank', rel: 'noopener', title: bookmark.title }, bookmark.title || bookmark.url),
+      h('a', { href: `/b/${bookmark.share_id}`, target: '_blank', rel: 'noopener', title: bookmark.title }, bookmark.title || bookmark.url),
       h('small', {}, `${bookmark.site} · ${timeAgo(time)}`),
     );
   }
@@ -754,10 +754,15 @@
     }
   });
 
-  // 從 /go/ 開新分頁點擊後回到本頁，更新「最近點擊」
+  // 從中轉頁開新分頁點擊後回到本頁，更新「最近點擊」
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadOverview();
   });
+
+  // 中轉頁（另一個分頁）編輯或刪除書籤後通知這裡重新載入
+  if ('BroadcastChannel' in window) {
+    new BroadcastChannel('bookmarks').addEventListener('message', () => Promise.all([loadOverview(), loadBookmarks()]));
+  }
 
   // PWA 分享目標：其他 App 分享過來的網址（Android 常放在 text 裡）直接帶入並抓取
   function handleSharedUrl() {
