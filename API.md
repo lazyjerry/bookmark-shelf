@@ -16,7 +16,7 @@ curl -u "$AUTH" -H 'Content-Type: application/json' \
   -d '{"url":"https://github.com/honojs/hono"}' https://<你的網域>/api/bookmarks
 ```
 
-不想寫程式、只想從 iPhone／Mac 的分享選單收藏，用 README 的〈[捷徑](README.md#捷徑)〉即可，不必讀下面的內容。
+不想寫程式、只想從 iPhone／Mac 的分享選單收藏，用 [SHORTCUTS.md](SHORTCUTS.md) 的 Apple 捷徑即可，不必讀下面的內容。
 
 ## 認證
 
