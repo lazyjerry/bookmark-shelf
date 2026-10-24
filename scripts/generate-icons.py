@@ -14,6 +14,11 @@ CORAL = (237, 115, 95)
 WHITE = (255, 254, 250)
 BASE = 1024
 OUT = Path(__file__).resolve().parent.parent / "public" / "icons"
+# 書脊 (x, y, w, h)，上層站在 y=15.5 的隔板上、下層站在 y=24.5 的底板上
+BOOKS = [
+    (10, 9.5, 2, 6), (12.5, 10.5, 2.5, 5), (15.5, 9, 2, 6.5), (18, 10.5, 2, 5), (20.5, 9.5, 1.5, 6),
+    (10, 18.5, 2.5, 6), (13, 19.5, 2, 5), (15.5, 18, 2, 6.5), (18, 19, 2.5, 5.5), (21, 18.5, 1, 6),
+]
 
 
 def draw(scale: float) -> Image.Image:
@@ -31,14 +36,18 @@ def draw(scale: float) -> Image.Image:
     d.ellipse([cx - r + shadow, cy - r + shadow, cx + r + shadow, cy + r + shadow], fill=NAVY)
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=CORAL)
 
-    # 書籤緞帶
-    w, h = r * 0.78, r * 1.1
-    left, top = cx - w / 2, cy - h / 2
-    notch = h * 0.24
-    d.polygon(
-        [(left, top), (left + w, top), (left + w, top + h), (cx, top + h - notch), (left, top + h)],
-        fill=WHITE,
-    )
+    # 書櫃：白色櫃體、兩層格子、每層幾本高矮不一的書脊。座標與 public/favicon.svg 同一套 32 格系統
+    u = r / 16
+    ox, oy = cx - 16 * u, cy - 16 * u
+
+    def box(x, y, w, h, fill, radius=0.0):
+        d.rounded_rectangle([ox + x * u, oy + y * u, ox + (x + w) * u, oy + (y + h) * u], radius=radius * u, fill=fill)
+
+    box(7.5, 6.5, 17, 20, WHITE, radius=1.5)
+    box(9, 8, 14, 7.5, CORAL)
+    box(9, 17, 14, 7.5, CORAL)
+    for x, y, w, h in BOOKS:
+        box(x, y, w, h, WHITE)
     return img
 
 
