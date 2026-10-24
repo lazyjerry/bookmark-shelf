@@ -209,9 +209,12 @@ footer span { padding: 0 8px; }
   .view-nav a { flex: 1; padding: 0 8px; }
   .tool-card { scroll-margin-top: 120px; }
   .brand span:last-child { display: none; }
-  .hero { padding: 42px 16px 32px; }
-  .hero-grid { grid-template-columns: 1fr; gap: 26px; }
-  .lede { font-size: 14px; padding-left: 16px; }
+  .hero { padding: 18px 16px 16px; }
+  .hero-grid { grid-template-columns: 1fr; gap: 10px; }
+  .lede { margin: 0; padding: 2px 0 2px 12px; border-left-width: 4px; font-size: 13px; line-height: 1.6; }
+  .eyebrow { margin-bottom: 8px; font-size: 10px; }
+  h1 { font-size: 36px; }
+  h1 em { -webkit-text-stroke-width: 1.5px; text-shadow: 2px 2px 0 rgba(23, 30, 52, .12); }
   .board { grid-template-columns: 1fr; gap: 22px; padding: 26px 16px 0; }
   .tool-card { padding: 20px; box-shadow: 4px 4px 0 rgba(23, 30, 52, .12); }
   .card-heading { gap: 14px; margin-bottom: 18px; }
@@ -224,7 +227,7 @@ footer span { padding: 0 8px; }
   footer { padding: 20px 16px 32px; }
 }
 @media (max-width: 420px) {
-  h1 { font-size: 54px; }
+  h1 { font-size: 32px; }
   .field-inline { flex-direction: column; }
   .field-inline input { border-right: 1px solid var(--field); }
   .field-inline button { width: 100%; margin-top: 8px; }
