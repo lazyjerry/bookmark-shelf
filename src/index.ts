@@ -10,7 +10,7 @@ import {
 import { buildDraft } from './enrich';
 import { EXTRACTORS } from './extractors';
 import { isEmail, loadMailSettings, MAX_RECIPIENTS, saveMailSettings, sendBookmarkMail } from './mailer';
-import { checkCredentials, getSettings, loadCredentials, putSettings, saveCredentials } from './settings';
+import { checkCredentials, getSettings, loadCredentials, putSettings } from './settings';
 import { hostOf, siteOf } from './sites';
 import type { Bookmark } from './types';
 import { dispatchEvent, testWebhook, WEBHOOK_EVENTS, WEBHOOK_METHODS, type Webhook, type WebhookEvent } from './webhooks';
@@ -85,7 +85,7 @@ const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/sw.js', '/offline.html'
 const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/passkey/options', '/api/auth/passkey', '/api/auth/logout']);
 
 // 整站需登入。瀏覽器在登入頁以密碼或 Passkey 換 Session Cookie；程式呼叫（捷徑、curl）照舊帶 Basic Auth。
-// 帳密以設定頁存進 D1 的為準，沒有時用 AUTH_USER／AUTH_PASS；都沒設定時拒絕所有請求，不預設開放
+// 帳密只由 AUTH_USER／AUTH_PASS 設定；沒設定時拒絕所有請求，不預設開放
 app.use('*', async (c, next) => {
   if (c.req.method === 'GET' && (PUBLIC_PATHS.has(c.req.path) || c.req.path.startsWith('/icons/'))) return next();
   if (c.req.method === 'POST' && AUTH_PATHS.has(c.req.path)) return next();
@@ -279,10 +279,10 @@ app.post('/api/webhooks/:id/test', async (c) => {
   return c.json({ status: await testWebhook(c.env.DB, hook, await latestOrSample(c.env.DB)) });
 });
 
-// 設定頁：姓名與登入帳密
+// 設定頁：姓名。登入帳號只顯示，帳密由環境變數 AUTH_USER／AUTH_PASS 設定
 app.get('/api/settings', async (c) => {
   const [settings, creds] = await Promise.all([getSettings(c.env.DB, ['profile_name']), loadCredentials(c.env)]);
-  return c.json({ name: settings.profile_name ?? '', username: creds?.username ?? '', source: creds?.source ?? 'env' });
+  return c.json({ name: settings.profile_name ?? '', username: creds?.username ?? '' });
 });
 
 app.patch('/api/settings', async (c) => {
@@ -290,22 +290,6 @@ app.patch('/api/settings', async (c) => {
   const name = text(body.name, 40);
   await putSettings(c.env.DB, { profile_name: name });
   return c.json({ name });
-});
-
-// 更新登入帳密需再輸入目前密碼；密碼不 trim，前後空白也算
-app.put('/api/settings/auth', async (c) => {
-  const body = await readJson(c);
-  const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
-  const password = typeof body.password === 'string' ? body.password : '';
-  const username = text(body.username, 64);
-  const creds = await loadCredentials(c.env);
-  if (!creds || !(await checkCredentials(creds, creds.username, current))) return c.json({ error: '目前密碼不正確' }, 403);
-  if (!username || username.includes(':')) throw new BadRequest('帳號不能空白，也不能含冒號');
-  if (password.length < 8 || password.length > 200) throw new BadRequest('新密碼需為 8 到 200 個字元');
-  await saveCredentials(c.env.DB, username, password);
-  // 改密碼通常是擔心外洩，其他裝置的 Session 一併登出，只留目前這個
-  await destroyOtherSessions(c.env.DB, c.get('sessionId'));
-  return c.json({ ok: true, username });
 });
 
 // 新增書籤通知信：寄件地址與收件地址。收件地址需先在 Cloudflare Email Routing 驗證
@@ -370,7 +354,7 @@ app.get('/api/settings/login', async (c) => {
   return c.json({ passkeys, sessions, session: Boolean(c.get('sessionId')) });
 });
 
-// 新增 Passkey 等於多一種登入方式，跟改密碼一樣要再輸入目前密碼
+// 新增 Passkey 等於多一種登入方式，要再輸入目前密碼
 app.post('/api/settings/passkeys/options', async (c) => {
   const body = await readJson(c);
   const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';

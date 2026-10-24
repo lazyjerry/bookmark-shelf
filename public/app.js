@@ -545,11 +545,9 @@
     try {
       const settings = await api('/api/settings');
       $('profile-name').value = settings.name;
-      $('auth-user').value = settings.username;
-      $('auth-source').textContent = settings.source === 'database'
-        ? '目前使用這裡設定的帳密。更新後其他裝置會被登出，需以新帳密重新登入。'
-        : '目前使用環境變數 AUTH_USER／AUTH_PASS。在這裡更新後改以這裡為準，環境變數不再生效。';
       showOwner(settings.name);
+      $('auth-info').replaceChildren('登入帳號為 ', h('b', {}, settings.username || '（未設定）'), '。帳號密碼由環境變數 ',
+        h('code', {}, 'AUTH_USER'), '／', h('code', {}, 'AUTH_PASS'), ' 設定，這裡不能修改；變更後到「登入方式」按「登出其他裝置」。');
     } catch (err) {
       setStatus($('profile-status'), `無法載入設定：${err.message}`, 'error');
     }
@@ -565,40 +563,6 @@
       setStatus($('profile-status'), '已儲存', 'ok');
     } catch (err) {
       setStatus($('profile-status'), err.message, 'error');
-    } finally {
-      busy(button, false);
-    }
-  });
-
-  $('auth-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const status = $('auth-status');
-    const username = $('auth-user').value.trim();
-    const password = $('auth-pass').value;
-    if (!$('auth-current').value || !username) {
-      setStatus(status, '請輸入目前密碼與帳號', 'error');
-      return;
-    }
-    if (password.length < 8) {
-      setStatus(status, '新密碼至少 8 個字元', 'error');
-      $('auth-pass').focus();
-      return;
-    }
-    if (password !== $('auth-pass2').value) {
-      setStatus(status, '兩次輸入的新密碼不一致', 'error');
-      $('auth-pass2').focus();
-      return;
-    }
-    const button = event.submitter || $('auth-form').querySelector('button');
-    busy(button, true, '更新中…');
-    try {
-      await api('/api/settings/auth', { method: 'PUT', body: { currentPassword: $('auth-current').value, username, password } });
-      $('auth-form').reset();
-      $('auth-user').value = username;
-      setStatus(status, '已更新。這台裝置維持登入，其他裝置需以新帳密重新登入', 'ok');
-      loadLogin();
-    } catch (err) {
-      setStatus(status, err.message, 'error');
     } finally {
       busy(button, false);
     }

@@ -6,12 +6,12 @@
 
 ## 功能
 
-- **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密可在設定頁更新（存進 D1，以 PBKDF2 雜湊），存過後以 D1 為準。
+- **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。
 - **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存。AI 失敗或停用時改用爬蟲結果與規則分類。
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
   - **搜尋與列表**：以搜尋為主，附網站分類（GitHub、Threads、Instagram……）、內容分類、標籤分類（依數量排序）與全部書籤。
-  - **設定**：個人資料（姓名、登入帳號密碼）、登入方式（Passkey、登出其他裝置）與通知信。
+  - **設定**：個人資料（姓名、登入帳號）、登入方式（Passkey、登出其他裝置）與通知信。
 - **欄位**：網址、標題、摘要、分類、標籤、備註、縮圖（`og:image`）、favicon，另記點擊次數與時間。
 - **網域擴充器**：針對特定網域改寫抓取與摘要規則，內建 GitHub（API、README、topics，可讀 Private Repo）與 YouTube（oEmbed）。
 - **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。設定介面目前隱藏，API 仍可使用。
@@ -42,6 +42,20 @@ npx wrangler secret put AUTH_PASS        # 設定登入密碼
 ```
 
 之後更新用 `npm run deploy`（先跑 migration 再部署）。
+
+### 更換登入密碼
+
+設定頁不能改密碼，登入密碼只由 secret `AUTH_PASS` 決定。用腳本互動更換（需先 `npx wrangler login`）：
+
+```bash
+sh scripts/change-password.sh
+```
+
+1. 選擇自行輸入新密碼（至少 8 個字元，輸入兩次，不會顯示在畫面上），或自動產生隨機密碼（`openssl rand -base64 24`）。
+2. 確認後以 `wrangler secret put AUTH_PASS` 寫進已部署的 Worker，舊密碼立即失效，不必重新部署。密碼經 stdin 傳給 wrangler，不會留在 shell 歷史。
+3. 自動產生的密碼只在完成時顯示一次，請存進密碼管理器。
+
+已登入的瀏覽器與 App 不會因此登出，要的話到設定頁「登入方式」按「登出其他裝置」；Passkey 不受影響。本機的 `.dev.vars` 不會跟著改。要改帳號時，修改 `wrangler.jsonc` 的 `AUTH_USER` 後重新部署。
 
 ### 綁定自訂網域
 
@@ -88,13 +102,9 @@ npm run typecheck
 - 縮圖與 favicon 只接受 http(s) 網址；頁面以 `textContent` 呈現使用者資料。
 - `manifest.webmanifest`、`sw.js`、`offline.html`、`app.css`、`app.js`、`favicon.svg` 與 `/icons/*` 不需登入（瀏覽器抓 manifest 與圖示時不帶認證，擋住會無法安裝 PWA）。這些檔案不含任何書籤資料。
 - Webhook 的簽章密鑰不會回傳到前端。
-- 設定頁更新的登入密碼以 PBKDF2-SHA256（100,000 次）雜湊後存進 D1，更新時需再輸入目前密碼。忘記密碼時刪掉 D1 裡的帳密，就會退回 `AUTH_USER`／`AUTH_PASS`：
-
-  ```bash
-  npx wrangler d1 execute DB --remote --command "DELETE FROM settings WHERE key IN ('auth_user', 'auth_hash')"
-  ```
+- 登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。改密碼用 `sh scripts/change-password.sh`（見「更換登入密碼」）；既有 Session 不會因此失效，改完到設定頁按「登出其他裝置」。
 - 登入頁（`/login`、`login.js`、`passkey.js`）與 `/api/auth/*` 不需登入。未登入的頁面導覽轉到登入頁，登入後回到原網址（含 PWA 分享進來的網址）；瀏覽器的 API 請求回 401 但不帶 `WWW-Authenticate`，不會跳出瀏覽器內建的登入框。
-- Session Cookie 為 `__Host-` 前綴、`HttpOnly`、`Secure`、`SameSite=Lax`，帶 `Max-Age`（iOS 主畫面 App 被系統關掉後，沒有效期的 Cookie 會消失）。D1 只存 token 的 SHA-256。更新帳密時，其他裝置的 Session 一併登出。
+- Session Cookie 為 `__Host-` 前綴、`HttpOnly`、`Secure`、`SameSite=Lax`，帶 `Max-Age`（iOS 主畫面 App 被系統關掉後，沒有效期的 Cookie 會消失）。D1 只存 token 的 SHA-256。
 - Passkey 要求使用者驗證（生物辨識或裝置 PIN，伺服器分不出是哪一種），新增時需再輸入目前密碼；challenge 5 分鐘內有效、只能用一次。密碼一直都能登入；遺失裝置時在設定頁刪除該 Passkey，或：
 
   ```bash
@@ -117,7 +127,6 @@ npm run typecheck
 | `PATCH` `DELETE` | `/api/webhooks/:id` | 更新、刪除 webhook |
 | `POST` | `/api/webhooks/:id/test` | 以最新一筆書籤實際呼叫一次 |
 | `GET` `PATCH` | `/api/settings` | 讀取設定、更新姓名 `{ "name" }` |
-| `PUT` | `/api/settings/auth` | `{ "currentPassword", "username", "password" }` 更新登入帳密 |
 | `GET` `PUT` | `/api/settings/mail` | 讀取、更新通知信 `{ "from", "to" }`（`to` 為陣列，或以換行、逗號分隔的字串，最多 10 個） |
 | `POST` | `/api/settings/mail/test` | 以最新一筆書籤寄測試信，回傳每個收件地址的結果 |
 | `POST` | `/api/auth/login` | `{ "username", "password" }` 登入，發 Session Cookie（免登入） |
@@ -219,10 +228,12 @@ python3 scripts/generate-icons.py
 
 ```
 ├── migrations/0001_init.sql    D1 資料表
-├── migrations/0002_settings.sql 個人設定與登入帳密
+├── migrations/0002_settings.sql 個人設定
 ├── migrations/0003_sessions_passkeys.sql 登入 Session、Passkey、WebAuthn challenge
+├── migrations/0005_drop_auth_settings.sql 清掉舊版設定頁存的登入帳密
 ├── public/                     前端頁面、PWA manifest、Service Worker、圖示
 ├── scripts/generate-icons.py   產生 PWA 圖示
+├── scripts/change-password.sh  互動更換登入密碼（wrangler secret put AUTH_PASS）
 ├── src/
 │   ├── index.ts                路由、Basic Auth、API
 │   ├── crawler.ts              網址正規化與 HTMLRewriter 擷取 meta
@@ -232,7 +243,7 @@ python3 scripts/generate-icons.py
 │   ├── sites.ts                網域 → 網站分類對照
 │   ├── webhooks.ts             Webhook 呼叫與簽章
 │   ├── mailer.ts               新增書籤通知信
-│   ├── settings.ts             個人設定、登入帳密雜湊與驗證
+│   ├── settings.ts             個人設定、登入帳密驗證
 │   ├── session.ts              瀏覽器登入的 Session Cookie
 │   ├── passkeys.ts             Passkey（WebAuthn）註冊與驗證
 │   └── extractors/             網域擴充器

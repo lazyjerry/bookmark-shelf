@@ -154,7 +154,7 @@
     <section class="tool-card accent-violet area-profile" data-views="settings" aria-labelledby="profile-title" hidden>
       <div class="card-heading">
         <span class="index" aria-hidden="true"></span>
-        <div><h2 id="profile-title">個人資料</h2><p>姓名與登入帳號密碼（程式呼叫的 Basic Auth 也用這組）</p></div>
+        <div><h2 id="profile-title">個人資料</h2><p>姓名與登入帳號</p></div>
       </div>
       <div class="profile-layout">
         <form id="profile-form" class="panel">
@@ -163,19 +163,9 @@
           <button type="submit">儲存姓名</button>
           <output id="profile-status" aria-live="polite"></output>
         </form>
-        <form id="auth-form" class="panel">
-          <label for="auth-current">目前密碼</label>
-          <input id="auth-current" type="password" autocomplete="current-password" required>
-          <label for="auth-user">帳號</label>
-          <input id="auth-user" autocomplete="username" maxlength="64" required>
-          <label for="auth-pass">新密碼（至少 8 個字元）</label>
-          <input id="auth-pass" type="password" autocomplete="new-password" minlength="8" maxlength="200" required>
-          <label for="auth-pass2">再次輸入新密碼</label>
-          <input id="auth-pass2" type="password" autocomplete="new-password" maxlength="200" required>
-          <p class="hint" id="auth-source"></p>
-          <button type="submit">更新帳號密碼</button>
-          <output id="auth-status" aria-live="polite"></output>
-        </form>
+        <div class="panel">
+          <p class="hint" id="auth-info">登入帳號密碼由環境變數 <code>AUTH_USER</code>／<code>AUTH_PASS</code> 設定，這裡不能修改。</p>
+        </div>
       </div>
     </section>
 
