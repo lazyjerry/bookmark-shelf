@@ -7,11 +7,11 @@
 ## 功能
 
 - **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。
-- **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存。AI 失敗或停用時改用爬蟲結果與規則分類。
+- **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存（設定頁可開啟「新增書籤時直接保存」，抓取完不經確認直接保存）。AI 失敗或停用時改用爬蟲結果與規則分類。
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
   - **搜尋與列表**：以搜尋為主，附網站分類（GitHub、Threads、Instagram……）、內容分類、標籤分類（依數量排序）與全部書籤。
-  - **設定**：個人資料（姓名、登入帳號）、登入方式（Passkey、登出其他裝置）與通知信。
+  - **設定**：個人資料（姓名、新增書籤時直接保存）、登入方式（Passkey、登出其他裝置）與通知信。
 - **欄位**：網址、標題、摘要、分類、標籤、備註、縮圖（`og:image`）、favicon，另記點擊次數與時間。
 - **網域擴充器**：針對特定網域改寫抓取與摘要規則，內建 GitHub（API、README、topics，可讀 Private Repo）與 YouTube（oEmbed）。
 - **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。設定介面目前隱藏，API 仍可使用。
@@ -126,7 +126,7 @@ npm run typecheck
 | `GET` `POST` | `/api/webhooks` | 列出、新增 webhook |
 | `PATCH` `DELETE` | `/api/webhooks/:id` | 更新、刪除 webhook |
 | `POST` | `/api/webhooks/:id/test` | 以最新一筆書籤實際呼叫一次 |
-| `GET` `PATCH` | `/api/settings` | 讀取設定、更新姓名 `{ "name" }` |
+| `GET` `PATCH` | `/api/settings` | 讀取設定、更新 `{ "name", "autoSave" }`（只更新有傳的欄位；`autoSave` 為新增書籤時直接保存） |
 | `GET` `PUT` | `/api/settings/mail` | 讀取、更新通知信 `{ "from", "to" }`（`to` 為陣列，或以換行、逗號分隔的字串，最多 10 個） |
 | `POST` | `/api/settings/mail/test` | 以最新一筆書籤寄測試信，回傳每個收件地址的結果 |
 | `POST` | `/api/auth/login` | `{ "username", "password" }` 登入，發 Session Cookie（免登入） |

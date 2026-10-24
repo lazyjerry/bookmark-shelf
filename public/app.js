@@ -18,6 +18,7 @@
     filters: { q: '', site: '', category: '', tag: '', sort: 'created' },
     offset: 0,
     draft: null,
+    autoSave: false,
     editing: null,
     // 卡片點擊編輯時用 id 找回書籤
     cache: new Map(),
@@ -291,6 +292,29 @@
     setStatus($('save-status'), '');
   }
 
+  // 設定頁開啟「直接保存」時：抓到的內容不經確認表單直接保存；失敗時退回確認表單，內容不必重抓
+  async function saveNow(draft, status) {
+    setStatus(status, '已抓取，保存中…');
+    let bookmark;
+    try {
+      ({ bookmark } = await api('/api/bookmarks', {
+        method: 'POST',
+        body: {
+          url: draft.url, title: draft.title || draft.url, summary: draft.summary, category: draft.category, tags: draft.tags,
+          thumbnail: draft.thumbnail, favicon: draft.favicon, note: '', extra: draft.extra,
+        },
+      }));
+    } catch (err) {
+      showDraft(draft);
+      throw err;
+    }
+    resetDraft();
+    const notes = draft.source.warnings;
+    setStatus(status, notes.length ? [`已保存「${bookmark.title}」，但有以下提醒：`, ...notes] : `已保存「${bookmark.title}」`, notes.length ? 'warn' : 'ok');
+    status.append(h('button', { type: 'button', class: 'text-btn', onclick: () => openEditor(bookmark.id) }, '編輯'));
+    await Promise.all([loadOverview(), loadBookmarks()]);
+  }
+
   $('fetch-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const url = $('url-input').value.trim();
@@ -305,6 +329,11 @@
     setStatus(status, '正在抓取頁面並整理內容，約需數秒');
     try {
       const { draft, duplicateId } = await api('/api/preview', { method: 'POST', body: { url } });
+      // 已收藏過的網址照舊停在確認表單，讓使用者看到提醒
+      if (state.autoSave && !duplicateId) {
+        await saveNow(draft, status);
+        return;
+      }
       showDraft(draft);
       const notes = [...draft.source.warnings];
       if (duplicateId) {
@@ -541,11 +570,20 @@
     $('owner-name').textContent = name || 'PRIVATE';
   }
 
+  // 直接保存：新增書籤時抓取完就保存，不顯示確認表單
+  function showAutoSave(on) {
+    state.autoSave = on;
+    $('pref-autosave').checked = on;
+    $('add-desc').textContent = on ? '輸入網址，抓取資訊後直接保存' : '輸入網址，抓取資訊後確認再保存';
+    $('fetch-form').querySelector('button').textContent = on ? '抓取並保存' : '抓取資訊';
+  }
+
   async function loadSettings() {
     try {
       const settings = await api('/api/settings');
       $('profile-name').value = settings.name;
       showOwner(settings.name);
+      showAutoSave(settings.autoSave);
       $('auth-info').replaceChildren('登入帳號為 ', h('b', {}, settings.username || '（未設定）'), '。帳號密碼由環境變數 ',
         h('code', {}, 'AUTH_USER'), '／', h('code', {}, 'AUTH_PASS'), ' 設定，這裡不能修改；變更後到「登入方式」按「登出其他裝置」。');
     } catch (err) {
@@ -565,6 +603,21 @@
       setStatus($('profile-status'), err.message, 'error');
     } finally {
       busy(button, false);
+    }
+  });
+
+  $('pref-autosave').addEventListener('change', async (event) => {
+    const input = event.currentTarget;
+    input.disabled = true;
+    try {
+      const { autoSave } = await api('/api/settings', { method: 'PATCH', body: { autoSave: input.checked } });
+      showAutoSave(autoSave);
+      setStatus($('pref-status'), autoSave ? '已開啟，新增書籤時抓取完直接保存' : '已關閉，新增書籤時先確認再保存', 'ok');
+    } catch (err) {
+      input.checked = !input.checked;
+      setStatus($('pref-status'), err.message, 'error');
+    } finally {
+      input.disabled = false;
     }
   });
 
@@ -725,8 +778,9 @@
   loadOverview();
   loadBookmarks();
   // Webhook 介面暫時隱藏，恢復時加回 loadHooks()
-  loadSettings();
+  const settingsLoaded = loadSettings();
   loadMail();
   loadLogin();
-  handleSharedUrl();
+  // 分享進來的網址要等設定載入，才知道要不要直接保存
+  settingsLoaded.then(handleSharedUrl);
 })();

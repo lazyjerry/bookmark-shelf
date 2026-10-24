@@ -154,7 +154,7 @@
     <section class="tool-card accent-violet area-profile" data-views="settings" aria-labelledby="profile-title" hidden>
       <div class="card-heading">
         <span class="index" aria-hidden="true"></span>
-        <div><h2 id="profile-title">個人資料</h2><p>姓名與登入帳號</p></div>
+        <div><h2 id="profile-title">個人資料</h2><p>姓名、新增書籤的偏好與登入帳號</p></div>
       </div>
       <div class="profile-layout">
         <form id="profile-form" class="panel">
@@ -164,6 +164,12 @@
           <output id="profile-status" aria-live="polite"></output>
         </form>
         <div class="panel">
+          <label class="switch" for="pref-autosave">
+            <input id="pref-autosave" type="checkbox" role="switch">
+            <span>新增書籤時直接保存</span>
+          </label>
+          <p class="hint">開啟後，抓取完網址資訊就直接保存，不再顯示確認表單；要修改時在列表按「編輯」。網址已收藏過時仍會停下來提醒。</p>
+          <output id="pref-status" aria-live="polite"></output>
           <p class="hint" id="auth-info">登入帳號密碼由環境變數 <code>AUTH_USER</code>／<code>AUTH_PASS</code> 設定，這裡不能修改。</p>
         </div>
       </div>

@@ -279,17 +279,23 @@ app.post('/api/webhooks/:id/test', async (c) => {
   return c.json({ status: await testWebhook(c.env.DB, hook, await latestOrSample(c.env.DB)) });
 });
 
-// 設定頁：姓名。登入帳號只顯示，帳密由環境變數 AUTH_USER／AUTH_PASS 設定
-app.get('/api/settings', async (c) => {
-  const [settings, creds] = await Promise.all([getSettings(c.env.DB, ['profile_name']), loadCredentials(c.env)]);
-  return c.json({ name: settings.profile_name ?? '', username: creds?.username ?? '' });
-});
+// 設定頁：姓名與偏好。登入帳號只顯示，帳密由環境變數 AUTH_USER／AUTH_PASS 設定
+async function loadProfile(env: Env) {
+  const [settings, creds] = await Promise.all([getSettings(env.DB, ['profile_name', 'auto_save']), loadCredentials(env)]);
+  return { name: settings.profile_name ?? '', autoSave: settings.auto_save === '1', username: creds?.username ?? '' };
+}
 
+app.get('/api/settings', async (c) => c.json(await loadProfile(c.env)));
+
+// 只更新有傳的欄位。autoSave：新增書籤時抓取完直接保存，不顯示確認表單
 app.patch('/api/settings', async (c) => {
   const body = await readJson(c);
-  const name = text(body.name, 40);
-  await putSettings(c.env.DB, { profile_name: name });
-  return c.json({ name });
+  const entries: Record<string, string> = {};
+  if (body.name !== undefined) entries.profile_name = text(body.name, 40);
+  if (body.autoSave !== undefined) entries.auto_save = body.autoSave ? '1' : '0';
+  if (!Object.keys(entries).length) throw new BadRequest('沒有要更新的欄位');
+  await putSettings(c.env.DB, entries);
+  return c.json(await loadProfile(c.env));
 });
 
 // 新增書籤通知信：寄件地址與收件地址。收件地址需先在 Cloudflare Email Routing 驗證
