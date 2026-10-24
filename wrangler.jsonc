@@ -19,6 +19,12 @@
   "ai": {
     "binding": "AI"
   },
+  // 新增書籤通知信。不限制收件地址，收件人在設定頁管理；只寄得到 Email Routing 已驗證的地址
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
   "vars": {
     "AUTH_USER": "admin",
     "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",

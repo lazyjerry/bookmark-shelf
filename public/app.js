@@ -601,6 +601,47 @@
     }
   });
 
+  // 通知信（設定頁）
+  async function loadMail() {
+    try {
+      const mail = await api('/api/settings/mail');
+      $('mail-from').value = mail.from;
+      $('mail-to').value = mail.to.join('\n');
+    } catch (err) {
+      setStatus($('mail-status'), `無法載入通知信設定：${err.message}`, 'error');
+    }
+  }
+
+  $('mail-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.submitter || $('mail-form').querySelector('button');
+    busy(button, true, '儲存中…');
+    try {
+      const mail = await api('/api/settings/mail', { method: 'PUT', body: { from: $('mail-from').value, to: $('mail-to').value } });
+      $('mail-from').value = mail.from;
+      $('mail-to').value = mail.to.join('\n');
+      setStatus($('mail-status'), mail.to.length ? `已儲存，新增書籤時會寄給 ${mail.to.length} 個地址` : '已儲存，目前不寄通知信', 'ok');
+    } catch (err) {
+      setStatus($('mail-status'), err.message, 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
+  $('mail-test').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    busy(button, true, '寄送中…');
+    try {
+      const { results } = await api('/api/settings/mail/test', { method: 'POST', body: {} });
+      const failed = results.filter((r) => !r.status.startsWith('OK'));
+      setStatus($('mail-status'), [failed.length ? `${failed.length} 個地址寄送失敗：` : '已寄出，請到收件匣確認：', ...results.map((r) => `${r.to}：${r.status}`)], failed.length ? 'warn' : 'ok');
+    } catch (err) {
+      setStatus($('mail-status'), err.message, 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
   // 從 /go/ 開新分頁點擊後回到本頁，更新「最近點擊」
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadOverview();
@@ -624,7 +665,8 @@
   showView(location.hash.slice(1));
   loadOverview();
   loadBookmarks();
-  loadHooks();
+  // Webhook 介面暫時隱藏，恢復時加回 loadHooks()
   loadSettings();
+  loadMail();
   handleSharedUrl();
 })();

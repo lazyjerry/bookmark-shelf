@@ -9,6 +9,7 @@ import {
 } from './db';
 import { buildDraft } from './enrich';
 import { EXTRACTORS } from './extractors';
+import { isEmail, loadMailSettings, MAX_RECIPIENTS, saveMailSettings, sendBookmarkMail } from './mailer';
 import { checkCredentials, getSettings, loadCredentials, putSettings, saveCredentials } from './settings';
 import { hostOf, siteOf } from './sites';
 import type { Bookmark } from './types';
@@ -44,6 +45,25 @@ function emit(c: AppContext, event: WebhookEvent, bookmark: Bookmark) {
   c.executionCtx.waitUntil(
     dispatchEvent(c.env.DB, event, bookmark).catch((err) => console.error(JSON.stringify({ message: 'webhook dispatch failed', event, error: String(err) }))),
   );
+}
+
+function notifyCreated(c: AppContext, bookmark: Bookmark) {
+  c.executionCtx.waitUntil(
+    sendBookmarkMail(c.env, bookmark, new URL(c.req.url).origin)
+      .then((results) => results.forEach((r) => console.log(JSON.stringify({ message: 'mail', bookmark: bookmark.id, to: r.to, status: r.status }))))
+      .catch((err) => console.error(JSON.stringify({ message: 'mail failed', bookmark: bookmark.id, error: String(err) }))),
+  );
+}
+
+// 測試用：最新一筆書籤，沒有就用範例資料
+async function latestOrSample(db: D1Database): Promise<Bookmark> {
+  const latest = (await listBookmarks(db, { limit: 1, offset: 0 })).items[0];
+  if (latest) return latest;
+  const now = new Date().toISOString();
+  return {
+    id: 0, url: 'https://example.com/', title: '範例書籤', summary: '這是測試資料。', category: '測試', note: '', tags: ['測試'],
+    thumbnail: '', favicon: '', site: 'example.com', host: 'example.com', extra: {}, click_count: 0, created_at: now, updated_at: now, last_clicked_at: null,
+  };
 }
 
 app.use('*', async (c, next) => {
@@ -123,6 +143,7 @@ app.post('/api/bookmarks', async (c) => {
     extra: draft?.extra ?? extra,
   });
   emit(c, 'bookmark.created', bookmark);
+  notifyCreated(c, bookmark);
   return c.json({ bookmark }, 201);
 });
 
@@ -230,13 +251,7 @@ app.delete('/api/webhooks/:id', async (c) => {
 app.post('/api/webhooks/:id/test', async (c) => {
   const hook = await c.env.DB.prepare('SELECT * FROM webhooks WHERE id = ?').bind(parseId(c)).first<Webhook>();
   if (!hook) return c.json({ error: '找不到 webhook' }, 404);
-  const latest = (await listBookmarks(c.env.DB, { limit: 1, offset: 0 })).items[0];
-  const now = new Date().toISOString();
-  const sample: Bookmark = latest ?? {
-    id: 0, url: 'https://example.com/', title: '範例書籤', summary: '這是 webhook 測試資料。', category: '測試', note: '', tags: ['測試'],
-    thumbnail: '', favicon: '', site: 'example.com', host: 'example.com', extra: {}, click_count: 0, created_at: now, updated_at: now, last_clicked_at: null,
-  };
-  return c.json({ status: await testWebhook(c.env.DB, hook, sample) });
+  return c.json({ status: await testWebhook(c.env.DB, hook, await latestOrSample(c.env.DB)) });
 });
 
 // 設定頁：姓名與登入帳密
@@ -264,6 +279,31 @@ app.put('/api/settings/auth', async (c) => {
   if (password.length < 8 || password.length > 200) throw new BadRequest('新密碼需為 8 到 200 個字元');
   await saveCredentials(c.env.DB, username, password);
   return c.json({ ok: true, username });
+});
+
+// 新增書籤通知信：寄件地址與收件地址。收件地址需先在 Cloudflare Email Routing 驗證
+app.get('/api/settings/mail', async (c) => c.json(await loadMailSettings(c.env.DB)));
+
+app.put('/api/settings/mail', async (c) => {
+  const body = await readJson(c);
+  const from = text(body.from, 254).toLowerCase();
+  const list = Array.isArray(body.to) ? body.to : typeof body.to === 'string' ? body.to.split(/[\s,;，、]+/) : [];
+  const to = [...new Set(list.map((item) => text(item, 254).toLowerCase()).filter(Boolean))];
+  if (from && !isEmail(from)) throw new BadRequest('寄件地址格式不正確');
+  const invalid = to.filter((item) => !isEmail(item));
+  if (invalid.length) throw new BadRequest(`收件地址格式不正確：${invalid.join('、')}`);
+  if (to.length > MAX_RECIPIENTS) throw new BadRequest(`收件地址最多 ${MAX_RECIPIENTS} 個`);
+  if (to.length && !from) throw new BadRequest('有收件地址時必須填寫寄件地址');
+  await saveMailSettings(c.env.DB, { from, to });
+  return c.json({ from, to });
+});
+
+// 用最新一筆書籤寄一次，回傳每個收件地址的結果
+app.post('/api/settings/mail/test', async (c) => {
+  const mail = await loadMailSettings(c.env.DB);
+  if (!mail.from || !mail.to.length) throw new BadRequest('請先儲存寄件地址與收件地址');
+  const results = await sendBookmarkMail(c.env, await latestOrSample(c.env.DB), new URL(c.req.url).origin, true);
+  return c.json({ results });
 });
 
 app.all('/api/*', (c) => c.json({ error: '找不到這個 API' }, 404));

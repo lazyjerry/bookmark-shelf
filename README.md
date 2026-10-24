@@ -1,6 +1,6 @@
 # 書籤收藏櫃 Bookmark Shelf
 
-貼上網址，自動抓取標題、摘要與縮圖，再由 Workers AI 分類並加上標籤。跑在 Cloudflare Workers + D1，整站以 Basic Auth 保護，可安裝成 PWA。
+蒐集平時不會用到，但是可能會有需要的網站、點子、功能與靈感。貼上網址，自動抓取標題、摘要與縮圖，再由 Workers AI 分類並加上標籤。跑在 Cloudflare Workers + D1，整站以 Basic Auth 保護，可安裝成 PWA。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lazyjerry/bookmark-shelf)
 
@@ -11,11 +11,12 @@
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
   - **搜尋與列表**：以搜尋為主，附網站分類（GitHub、Threads、Instagram……）、內容分類、標籤分類（依數量排序）與全部書籤。
-  - **設定**：個人資料（姓名、登入帳號密碼）與 Webhook。
+  - **設定**：個人資料（姓名、登入帳號密碼）與通知信。
 - **欄位**：網址、標題、摘要、分類、標籤、備註、縮圖（`og:image`）、favicon，另記點擊次數與時間。
 - **網域擴充器**：針對特定網域改寫抓取與摘要規則，內建 GitHub（API、README、topics，可讀 Private Repo）與 YouTube（oEmbed）。
-- **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。
+- **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。設定介面目前隱藏，API 仍可使用。
 - **PWA**：可安裝到桌面或手機主畫面；Android 可從其他 App「分享」網址直接新增。
+- **通知信**：新增書籤時，寄網站資料（標題、網址、網站、分類、標籤、縮圖）與摘要給設定頁指定的收件人。走 Cloudflare Email Routing，只寄得到已驗證的收件地址。
 
 ## 部署
 
@@ -57,6 +58,16 @@ npx wrangler deploy --domain <你的網域>
 | 名稱 | 說明 |
 |---|---|
 | `GITHUB_TOKEN` | GitHub Personal Access Token（secret）。未設定時 GitHub API 常因共用 IP 達到速率上限而退回一般爬蟲；要讀 Private Repo 時需給 repo 讀取權限。設定：`npx wrangler secret put GITHUB_TOKEN` |
+
+### 新增書籤通知信
+
+`wrangler.jsonc` 已宣告 `send_email` binding（`EMAIL`），不限制收件地址。寄送走 Email Routing，免費、任何方案都能用，但只寄得到帳號裡已驗證的收件地址：
+
+1. 寄件網域需託管在 Cloudflare，並在 Dashboard → 該網域 → Email → Email Routing 啟用。
+2. 每個收件地址在 Email Routing → Destination addresses 新增，對方點開驗證信。
+3. 到設定頁「通知信」填寄件地址（該網域下任一地址，例如 `bookmark@<你的網域>`）與收件地址，儲存後按「寄測試信」，逐一回報每個地址的結果。
+
+收件地址清空即停止寄送。寄送在背景執行，失敗只記在 Worker log（`message: "mail"`），不影響新增書籤。本機 `npm run dev` 不會真的寄出，信件內容存到 `.wrangler/tmp/email/`。
 
 ## 本機開發
 
@@ -100,6 +111,8 @@ npm run typecheck
 | `POST` | `/api/webhooks/:id/test` | 以最新一筆書籤實際呼叫一次 |
 | `GET` `PATCH` | `/api/settings` | 讀取設定、更新姓名 `{ "name" }` |
 | `PUT` | `/api/settings/auth` | `{ "currentPassword", "username", "password" }` 更新登入帳密 |
+| `GET` `PUT` | `/api/settings/mail` | 讀取、更新通知信 `{ "from", "to" }`（`to` 為陣列，或以換行、逗號分隔的字串，最多 10 個） |
+| `POST` | `/api/settings/mail/test` | 以最新一筆書籤寄測試信，回傳每個收件地址的結果 |
 
 例如用捷徑或腳本直接收藏：
 
@@ -201,6 +214,7 @@ python3 scripts/generate-icons.py
 │   ├── db.ts                   D1 查詢
 │   ├── sites.ts                網域 → 網站分類對照
 │   ├── webhooks.ts             Webhook 呼叫與簽章
+│   ├── mailer.ts               新增書籤通知信
 │   ├── settings.ts             個人設定、登入帳密雜湊與驗證
 │   └── extractors/             網域擴充器
 └── wrangler.jsonc

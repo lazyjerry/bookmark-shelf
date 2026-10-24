@@ -33,7 +33,7 @@
     <p class="eyebrow">BOOKMARK DEV TOOL</p>
     <div class="hero-grid">
       <h1><span>書籤</span><em>收藏櫃</em></h1>
-      <p class="lede">貼上網址，自動抓取標題、摘要與縮圖，再分類並加上標籤。新增與搜尋分頁切換，列表兩邊都看得到。</p>
+      <p class="lede">蒐集平時不會用到，但是可能會有需要的網站、點子、功能與靈感。</p>
     </div>
   </section>
 
@@ -178,7 +178,39 @@
       </div>
     </section>
 
-    <section class="tool-card accent-amber area-hooks" data-views="settings" aria-labelledby="hooks-title" hidden>
+    <section class="tool-card accent-green area-mail" data-views="settings" aria-labelledby="mail-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="mail-title">通知信</h2><p>新增書籤時，寄網站資料與摘要給指定的收件人</p></div>
+      </div>
+      <div class="mail-layout">
+        <form id="mail-form" class="panel">
+          <label for="mail-from">寄件地址</label>
+          <input id="mail-from" type="email" maxlength="254" placeholder="bookmark@你的網域">
+          <label for="mail-to">收件地址（一行一個，最多 10 個）</label>
+          <textarea id="mail-to" rows="4" placeholder="someone@example.com"></textarea>
+          <p class="hint">收件地址清空即停止寄送。儲存後按「寄測試信」，以最新一筆書籤確認每個地址都收得到。</p>
+          <div class="actions">
+            <button type="submit">儲存</button>
+            <button type="button" class="ghost" id="mail-test">寄測試信</button>
+          </div>
+          <output id="mail-status" aria-live="polite"></output>
+        </form>
+        <div class="panel mail-steps">
+          <strong>收件地址要先在 Cloudflare 驗證</strong>
+          <ol>
+            <li>寄件地址的網域需託管在 Cloudflare，並在 Dashboard → 該網域 → Email → <b>Email Routing</b> 啟用。</li>
+            <li>寄件地址填這個網域下的任一地址，例如 <code>bookmark@你的網域</code>，不必真的有信箱。</li>
+            <li>每個收件地址都要在 Email Routing → <b>Destination addresses</b> 新增，並請對方點開 Cloudflare 寄出的驗證信。</li>
+            <li>回到這裡按「寄測試信」。未驗證的地址會顯示錯誤，其他地址照常寄送。</li>
+          </ol>
+          <p class="hint">只寄得到已驗證的地址，所以不會誤寄給陌生人；新增收件人時記得先完成第 3 步。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Webhook 介面暫時隱藏：沒有 data-views，showView() 不會打開它。恢復時加回 data-views="settings"，並在 app.js 呼叫 loadHooks() -->
+    <section class="tool-card accent-amber area-hooks" aria-labelledby="hooks-title" hidden>
       <div class="card-heading">
         <span class="index" aria-hidden="true"></span>
         <div><h2 id="hooks-title">Webhook</h2><p>書籤新增、更新、刪除、點擊時，呼叫指定網址</p></div>
