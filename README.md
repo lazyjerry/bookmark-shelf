@@ -9,6 +9,7 @@
 - **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。
 - **應用程式帳密**：在設定頁替每支程式建立一組帳密，以 Basic Auth 呼叫書籤 API（新增、查詢、更新、刪除）；只能呼叫 `/api/bookmarks` 與 `/api/preview`，用不到時個別刪除即可，不必更換登入密碼。每次呼叫都留下紀錄（時間、方法、路徑、狀態碼、書籤 id、IP、User-Agent），在設定頁查看；保留天數與筆數每組各自設定（預設 7 天、700 筆，上限 30 天、10000 筆）。完整說明見 [API.md](API.md)。
 - **VS Code 延伸模組**：在 VS Code 側邊欄瀏覽、搜尋、新增與編輯書籤，以應用程式帳密呼叫書籤 API，見〈[VS Code 延伸模組](#vs-code-延伸模組)〉。
+- **iPhone／Mac 捷徑**：從 Safari 或其他 App 的分享選單直接收藏，帳密在加入捷徑時才填入，見〈[捷徑](#捷徑)〉。
 - **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存（設定頁可開啟「新增書籤時直接保存」，抓取完不經確認直接保存）。AI 失敗或停用時改用爬蟲結果與規則分類。
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
@@ -121,7 +122,7 @@ npm run typecheck
 - Webhook 的簽章密鑰不會回傳到前端。
 - 登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。改密碼用 `sh scripts/change-password.sh`（見「更換登入密碼」）；既有 Session 不會因此失效，改完到設定頁按「登出其他裝置」。
 - 登入頁（`/login`、`login.js`、`passkey.js`）與 `/api/auth/*` 不需登入。未登入的頁面導覽轉到登入頁，登入後回到原網址（含 PWA 分享進來的網址）；瀏覽器的 API 請求回 401 但不帶 `WWW-Authenticate`，不會跳出瀏覽器內建的登入框。
-- 應用程式帳密的帳號（`app-` 開頭）與密碼（256 位元亂數）都由伺服器產生，密碼只在建立時顯示一次，D1 只存 SHA-256。建立時需再輸入目前密碼；只能呼叫 `/api/bookmarks`、`/api/bookmarks/:id`、`/api/preview`，其他路徑回 403。更換 `AUTH_PASS` 不會讓它們失效，要在設定頁刪除。
+- 應用程式帳密的帳號（`app-` 開頭）與密碼（256 位元亂數）都由伺服器產生，密碼只在建立時顯示一次，D1 只存 SHA-256。建立時需再輸入目前密碼，或以已新增的 Passkey 驗證；只能呼叫 `/api/bookmarks`、`/api/bookmarks/:id`、`/api/preview`，其他路徑回 403。更換 `AUTH_PASS` 不會讓它們失效，要在設定頁刪除。
 - 應用程式帳密的呼叫紀錄存在 D1 `app_logs`，含被擋下的 403，不含請求內容；寫入新紀錄時刪掉超過保留天數或筆數的部分，調小保留條件時立即刪除。帳密刪除時紀錄一併刪除。驗證失敗（401）時還不知道是哪組帳密，不記錄。
 - Session Cookie 為 `__Host-` 前綴、`HttpOnly`、`Secure`、`SameSite=Lax`，帶 `Max-Age`（iOS 主畫面 App 被系統關掉後，沒有效期的 Cookie 會消失）。D1 只存 token 的 SHA-256。
 - Passkey 要求使用者驗證（生物辨識或裝置 PIN，伺服器分不出是哪一種），新增時需再輸入目前密碼；challenge 5 分鐘內有效、只能用一次。密碼一直都能登入；遺失裝置時在設定頁刪除該 Passkey，或：
@@ -163,7 +164,7 @@ npm run typecheck
 | `POST` | `/api/settings/passkeys/options`、`/api/settings/passkeys` | 新增 Passkey：`{ "currentPassword" }` 取得選項，再送 `{ "name", "response" }` |
 | `DELETE` | `/api/settings/passkeys/:id` | 刪除 Passkey |
 | `DELETE` | `/api/settings/sessions` | 登出目前這個以外的所有 Session |
-| `GET` `POST` | `/api/settings/apps` | 列出、建立應用程式帳密：`{ "name", "currentPassword", "logDays", "logLimit" }`（保留天數 1–30、預設 7；保留筆數 1–10000、預設 700），回傳 `app`（含 `username`）與只出現這一次的 `password` |
+| `GET` `POST` | `/api/settings/apps` | 列出、建立應用程式帳密：`{ "name", "currentPassword", "logDays", "logLimit" }`（`currentPassword` 可改為 `passkey`：以 `/api/auth/passkey/options` 的選項簽出的驗證回應；保留天數 1–30、預設 7；保留筆數 1–10000、預設 700），回傳 `app`（含 `username`）與只出現這一次的 `password` |
 | `PATCH` `DELETE` | `/api/settings/apps/:id` | 更新 `{ "name", "logDays", "logLimit" }`（只更新有傳的欄位）、刪除應用程式帳密（連同呼叫紀錄） |
 | `GET` | `/api/settings/apps/:id/logs` | 呼叫紀錄，新的在前；參數 `limit`（預設 50，最多 200）、`offset`，回傳 `logs` 與 `total` |
 
@@ -206,6 +207,39 @@ curl -u "$AUTH" -X DELETE https://<你的網域>/api/bookmarks/12               
 <img src="docs/screenshots/ext-welcome.png" width="300" alt="尚未設定連線時的側邊欄：部署步驟與「設定連線」按鈕">
 
 連線設定存在系統鑰匙圈（VS Code SecretStorage），不寫進設定檔、不跟著設定同步。延伸模組只能呼叫書籤 API；從側邊欄開啟原網址不經過 `/go/<id>`，不會增加點擊次數。每次呼叫帶 `User-Agent: bookmark-shelf-vscode/<版本>`，在設定頁的呼叫紀錄可以辨認。指令、設定與限制的完整清單見該 repo 的 README。
+
+## 捷徑
+
+兩個 Apple 捷徑，iPhone、iPad、Mac 通用，從 Safari 或其他 App 的分享選單把網址送進書籤收藏櫃。原始檔在 `shortcuts/`，下表的連結是作者分享的 iCloud 連結。
+
+| 捷徑 | 做什麼 | 加入時要填 | 連結 |
+|---|---|---|---|
+| 收藏到書籤收藏櫃 | 背景呼叫 `POST /api/bookmarks` 直接收藏，完成後顯示通知（標題或錯誤訊息） | 網址、授權碼 | （待補） |
+| 用書籤收藏櫃開啟 | 在瀏覽器開啟 `/?url=…` 交給網站抓取；設定頁開了「新增書籤時直接保存」就自動存 | 網址 | （待補） |
+
+兩個捷徑分享出去時都不含帳密：要填的欄位設成「匯入問題」，分享時被清空，加入捷徑的人在設定畫面自己填。
+
+### 加入與使用
+
+1. 設定頁「應用程式帳密」建立一組帳密，名稱例如「捷徑」。建立後畫面多出「網址」與「授權碼」兩列，各有複製鈕；授權碼是 `base64(帳號:密碼)`，等同密碼，只顯示這一次。
+2. 在 iPhone 或 Mac 點上表的連結，按「取得捷徑」，在設定畫面貼上網址（與授權碼）。
+3. Safari 分享選單選「收藏到書籤收藏櫃」即收藏；直接執行捷徑會問你要收藏的網址。
+4. 「用書籤收藏櫃開啟」不需要帳密，但會跳到瀏覽器；iOS 的 Safari 與主畫面 PWA 是兩套 Cookie，Safari 要自己登入一次（30 天）。
+
+### 注意
+
+- 加入後帳密以明碼存在捷徑裡，不要再把這個捷徑分享給別人。真要分享，先刪掉自己那組帳密，或從 `shortcuts/` 原始檔重新產生。
+- 捷徑的呼叫在設定頁的呼叫紀錄以 `bookmark-shelf-shortcut/1` 的 User-Agent 出現；看到陌生 IP 就刪除該組帳密，捷徑立即失效。
+- 捷徑更新時這裡會換新連結（每次重新分享都是新連結，沒有自動更新），重新加入並重填一次網址與授權碼，舊的刪掉。
+- 捷徑透過 iCloud 同步時，標準保護下金鑰由 Apple 持有，開啟「進階資料保護」才是端對端加密。
+
+### 自行建置（Mac）
+
+```bash
+scripts/build-shortcuts.sh --open
+```
+
+把 `shortcuts/*.plist` 轉成簽署過的 `.shortcut` 放到 `build/shortcuts/`，`--open` 直接匯入「捷徑」App。簽署需要登入 iCloud。要產生 iCloud 連結：在「捷徑」App 對該捷徑按分享 →「拷貝 iCloud 連結」。
 
 ## Webhook
 
@@ -302,6 +336,8 @@ python3 scripts/generate-icons.py
 ├── public/                     前端頁面、PWA manifest、Service Worker、圖示
 ├── scripts/generate-icons.py   產生 PWA 圖示
 ├── scripts/change-password.sh  互動更換登入密碼（wrangler secret put AUTH_PASS）
+├── scripts/build-shortcuts.sh  把 shortcuts/ 的原始檔簽署成 .shortcut（Mac）
+├── shortcuts/                  Apple 捷徑的原始檔（XML plist）
 ├── src/
 │   ├── index.ts                路由、Basic Auth、API
 │   ├── crawler.ts              網址正規化與 HTMLRewriter 擷取 meta

@@ -689,6 +689,7 @@
   function renderPasskeys(passkeys) {
     $('passkey-list').replaceChildren(...passkeys.map(passkeyItem));
     if (!passkeys.length) $('passkey-list').append(h('li', {}, h('p', { class: 'empty' }, '還沒有 Passkey')));
+    showAppPasskey(passkeys.length > 0);
   }
 
   function showSessions(count) {
@@ -804,6 +805,9 @@
       h('strong', {}, '請立即複製保存，離開或重新整理後就看不到密碼'),
       secretRow('帳號', app.username),
       secretRow('密碼', password),
+      secretRow('網址', location.origin),
+      secretRow('授權碼', btoa(`${app.username}:${password}`)),
+      h('p', { class: 'hint' }, '網址與授權碼給 iPhone／Mac 捷徑加入時填寫。授權碼等同密碼，同樣只顯示這一次。'),
       h('pre', {}, example),
     );
     $('app-secret').hidden = false;
@@ -818,25 +822,57 @@
     }
   }
 
-  $('app-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const button = event.submitter || $('app-form').querySelector('button');
-    busy(button, true, '建立中…');
+  // 有 Passkey 且瀏覽器支援時，確認身分可改用 Passkey 代替目前密碼
+  function showAppPasskey(available) {
+    $('app-verify-passkey').hidden = !(available && Boolean(window.Passkey) && window.Passkey.supported());
+  }
+
+  // 按「建立帳密」先展開「確認身分」，確認後才真的建立
+  function toggleAppVerify(open) {
+    $('app-verify').hidden = !open;
+    $('app-submit').hidden = open;
+    $('app-current').value = '';
+    if (open) $('app-current').focus();
+  }
+
+  async function createApp(button, usePasskey) {
+    const status = $('app-status');
+    if (!usePasskey && !$('app-current').value) {
+      setStatus(status, '請輸入目前密碼', 'error');
+      $('app-current').focus();
+      return;
+    }
+    busy(button, true, usePasskey ? '等待驗證…' : '建立中…');
     try {
-      const { app, password, apps } = await api('/api/settings/apps', {
-        method: 'POST',
-        body: { currentPassword: $('app-current').value, name: $('app-name').value, logDays: $('app-new-days').value, logLimit: $('app-new-limit').value },
-      });
+      const body = { name: $('app-name').value, logDays: $('app-new-days').value, logLimit: $('app-new-limit').value };
+      // Passkey：跟登入頁一樣先取 challenge 請瀏覽器簽章，簽章跟表單一起送出
+      if (usePasskey) body.passkey = await window.Passkey.get(await api('/api/auth/passkey/options', { method: 'POST', body: {} }));
+      else body.currentPassword = $('app-current').value;
+      const { app, password, apps } = await api('/api/settings/apps', { method: 'POST', body });
       $('app-form').reset();
+      toggleAppVerify(false);
       renderApps(apps);
       showAppSecret(app, password);
-      setStatus($('app-status'), `已建立「${app.name}」`, 'ok');
+      setStatus(status, `已建立「${app.name}」`, 'ok');
     } catch (err) {
-      setStatus($('app-status'), err.message, 'error');
+      setStatus(status, usePasskey ? window.Passkey.message(err) : err.message, 'error');
     } finally {
       busy(button, false);
     }
+  }
+
+  // 第一次送出（名稱等欄位已通過瀏覽器驗證）只展開確認身分；密碼欄按 Enter 或「用密碼建立」才送出
+  $('app-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if ($('app-verify').hidden) {
+      setStatus($('app-status'), '');
+      toggleAppVerify(true);
+      return;
+    }
+    createApp($('app-verify-password'), false);
   });
+  $('app-verify-passkey').addEventListener('click', (event) => createApp(event.currentTarget, true));
+  $('app-verify-cancel').addEventListener('click', () => toggleAppVerify(false));
 
   // 應用程式帳密的呼叫紀錄與保留設定（對話框）
   const LOG_PAGE = 50;

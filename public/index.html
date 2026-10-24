@@ -210,8 +210,6 @@
       </div>
       <div class="login-layout">
         <form id="app-form" class="panel">
-          <label for="app-current">目前密碼</label>
-          <input id="app-current" type="password" autocomplete="current-password" required>
           <label for="app-name">名稱</label>
           <input id="app-name" maxlength="60" required placeholder="例如 iOS 捷徑、備份腳本">
           <div class="field-row">
@@ -219,7 +217,18 @@
             <div><label for="app-new-limit">紀錄保留筆數（1–10000）</label><input id="app-new-limit" type="number" min="1" max="10000" step="1" value="700" required></div>
           </div>
           <p class="hint">帳號與密碼由系統產生。密碼只在建立後顯示這一次，伺服器只保存雜湊，之後無法再查看；遺失時刪除重建即可。只能呼叫 <code>/api/bookmarks</code> 與 <code>/api/preview</code>，不能變更設定。每次呼叫都會留下紀錄，超過保留天數或筆數的自動刪除。</p>
-          <button type="submit">建立帳密</button>
+          <button type="submit" id="app-submit">建立帳密</button>
+          <div class="app-verify" id="app-verify" hidden>
+            <strong>確認身分後建立</strong>
+            <p class="hint">帳密等於多一種登入方式，請輸入目前密碼；已新增 Passkey 的話，也可以改用 Face ID、Touch ID 或 Windows Hello 驗證。</p>
+            <label for="app-current">目前密碼</label>
+            <input id="app-current" type="password" autocomplete="current-password">
+            <div class="actions">
+              <button type="submit" id="app-verify-password">用密碼建立</button>
+              <button type="button" class="ghost" id="app-verify-passkey" hidden>用 Passkey 建立</button>
+              <button type="button" class="ghost" id="app-verify-cancel">取消</button>
+            </div>
+          </div>
           <output id="app-status" aria-live="polite"></output>
           <div class="app-secret" id="app-secret" hidden></div>
         </form>
@@ -229,6 +238,7 @@
           <p class="hint">更換 <code>AUTH_PASS</code> 不會讓這些帳密失效，不再使用的請在這裡刪除。</p>
           <output id="app-list-status" aria-live="polite"></output>
           <a class="link-button" href="https://github.com/lazyjerry/bookmark-shelf/blob/main/API.md" target="_blank" rel="noopener noreferrer">API 使用說明（GitHub）</a>
+          <a class="link-button" href="https://github.com/lazyjerry/bookmark-shelf/blob/main/README.md#捷徑" target="_blank" rel="noopener noreferrer">iPhone／Mac 捷徑（GitHub）</a>
         </div>
       </div>
     </section>

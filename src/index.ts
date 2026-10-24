@@ -464,12 +464,13 @@ app.delete('/api/settings/sessions', async (c) => {
 // 設定頁：應用程式帳密。建立時才回傳一次原始密碼
 app.get('/api/settings/apps', async (c) => c.json({ apps: await listAppCredentials(c.env.DB) }));
 
-// 跟新增 Passkey 一樣是多一種登入方式，要再輸入目前密碼
+// 跟新增 Passkey 一樣是多一種登入方式，要再輸入目前密碼；已有 Passkey 時可改帶 Passkey 的驗證回應（選項由 /api/auth/passkey/options 取得）
 app.post('/api/settings/apps', async (c) => {
   const body = await readJson(c);
   const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
   const creds = await loadCredentials(c.env);
-  if (!creds || !(await checkCredentials(creds, creds.username, current))) return c.json({ error: '目前密碼不正確' }, 403);
+  if (body.passkey) await authenticatePasskey(c.env.DB, c.req.url, passkeyResponse({ response: body.passkey }));
+  else if (!creds || !(await checkCredentials(creds, creds.username, current))) return c.json({ error: '目前密碼不正確' }, 403);
   const name = text(body.name, 60);
   if (!name) throw new BadRequest('請填寫名稱');
   if ((await countAppCredentials(c.env.DB)) >= MAX_APP_CREDENTIALS) throw new BadRequest(`應用程式帳密最多 ${MAX_APP_CREDENTIALS} 組`);

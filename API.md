@@ -6,7 +6,7 @@
 
 ## 快速開始
 
-1. 用瀏覽器登入，到「設定」→「應用程式帳密」，輸入目前密碼與名稱後按「建立帳密」。
+1. 用瀏覽器登入，到「設定」→「應用程式帳密」，填寫名稱後按「建立帳密」，再輸入目前密碼確認（已新增 Passkey 的話，也可以按「用 Passkey 建立」驗證）。
 2. 複製畫面上的帳號（`app-` 開頭）與密碼。**密碼只會顯示這一次**，伺服器只保存雜湊，之後無法再查看；遺失時刪除該組帳密再重建。
 3. 呼叫 API：
 
@@ -15,6 +15,8 @@ AUTH='app-xxxxxxxxxxxx:<建立時顯示的密碼>'
 curl -u "$AUTH" -H 'Content-Type: application/json' \
   -d '{"url":"https://github.com/honojs/hono"}' https://<你的網域>/api/bookmarks
 ```
+
+不想寫程式、只想從 iPhone／Mac 的分享選單收藏，用 README 的〈[捷徑](README.md#捷徑)〉即可，不必讀下面的內容。
 
 ## 認證
 
@@ -198,7 +200,7 @@ DELETE /api/bookmarks/:id
 | 方法 | 路徑 | 說明 |
 |---|---|---|
 | `GET` | `/api/settings/apps` | 列出應用程式帳密：`{ "apps": [ … ] }` |
-| `POST` | `/api/settings/apps` | 建立：`{ "name", "currentPassword", "logDays", "logLimit" }`（後兩者可省略，取預設值）；回 `201` 與 `{ "app", "password", "apps" }`，`password` 只出現這一次 |
+| `POST` | `/api/settings/apps` | 建立：`{ "name", "currentPassword", "logDays", "logLimit" }`（後兩者可省略，取預設值；`currentPassword` 可改為 `passkey`，帶以 `/api/auth/passkey/options` 的選項簽出的驗證回應）；回 `201` 與 `{ "app", "password", "apps" }`，`password` 只出現這一次 |
 | `PATCH` | `/api/settings/apps/:id` | 更新 `{ "name", "logDays", "logLimit" }`，只更新有傳的欄位 |
 | `DELETE` | `/api/settings/apps/:id` | 刪除帳密與它的紀錄 |
 | `GET` | `/api/settings/apps/:id/logs` | 呼叫紀錄，新的在前；參數 `limit`（預設 50，最多 200）、`offset`；回 `{ "logs": [ … ], "total": 123 }` |
