@@ -222,12 +222,12 @@
             <strong>確認身分後建立</strong>
             <p class="hint">帳密等於多一種登入方式，請輸入目前密碼；已新增 Passkey 的話，也可以改用 Face ID、Touch ID 或 Windows Hello 驗證。</p>
             <label for="app-current">目前密碼</label>
-            <input id="app-current" type="password" autocomplete="current-password">
-            <div class="actions">
-              <button type="submit" id="app-verify-password">用密碼建立</button>
-              <button type="button" class="ghost" id="app-verify-passkey" hidden>用 Passkey 建立</button>
-              <button type="button" class="ghost" id="app-verify-cancel">取消</button>
+            <div class="field-inline">
+              <input id="app-current" type="password" autocomplete="current-password">
+              <button type="submit" id="app-verify-password">建立</button>
             </div>
+            <button type="button" class="ghost" id="app-verify-passkey" hidden>用 Passkey 建立</button>
+            <button type="button" class="ghost cancel" id="app-verify-cancel">取消</button>
           </div>
           <output id="app-status" aria-live="polite"></output>
           <div class="app-secret" id="app-secret" hidden></div>

@@ -273,8 +273,7 @@ footer span { padding: 0 8px; }
 .passkey-list li > .app-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; }
 .app-verify { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: white; border: 1px solid var(--line); border-left: 5px solid var(--accent); }
 .app-verify strong { font-size: 13px; }
-.app-verify .actions { flex-wrap: wrap; }
-.app-verify .actions button:first-child { flex-basis: 100%; }
+.app-verify .cancel { min-height: 36px; font-size: 13px; }
 .app-log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .app-log-list li { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: white; border: 1px solid var(--line); border-left: 5px solid var(--green); }
 .app-log-list li.fail { border-left-color: var(--red); }
