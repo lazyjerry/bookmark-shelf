@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "書籤收藏櫃",
+  "short_name": "書籤收藏",
+  "description": "貼上網址自動抓取標題、摘要與縮圖，分類加標籤後保存。",
+  "lang": "zh-Hant-TW",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ed",
+  "theme_color": "#171e34",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

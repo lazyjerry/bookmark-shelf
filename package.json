@@ -1,0 +1,41 @@
+{
+  "name": "bookmark-shelf",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:migrations:apply": "wrangler d1 migrations apply DB --remote",
+    "db:migrations:local": "wrangler d1 migrations apply DB --local",
+    "deploy": "npm run db:migrations:apply && wrangler deploy",
+    "types": "wrangler types --strict-vars=false",
+    "typecheck": "npm run types && tsc --noEmit"
+  },
+  "cloudflare": {
+    "bindings": {
+      "AUTH_USER": {
+        "description": "Basic Auth 登入帳號。"
+      },
+      "AUTH_PASS": {
+        "description": "Basic Auth 登入密碼。可用 `openssl rand -base64 24` 產生。未設定時整站拒絕存取。"
+      },
+      "AI_MODEL": {
+        "description": "Workers AI 模型 ID，需支援 JSON Mode（`response_format`）。"
+      },
+      "AI_ENABLED": {
+        "description": "設為 `false` 時停用 AI，只用爬蟲結果與規則產生標題、摘要與分類。"
+      }
+    }
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wrangler": "^4.152.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true
+  }
+}

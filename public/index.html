@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>書籤收藏櫃｜網址自動整理</title>
+  <meta name="description" content="貼上網址自動抓取標題、摘要與縮圖，AI 分類加標籤，依最近新建、最近點擊、網站與標籤瀏覽。">
+  <link rel="icon" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#171e34">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="書籤收藏">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="topbar">
+      <a class="brand" href="/" aria-label="書籤收藏櫃首頁"><span class="brand-mark">B</span><span>BOOKMARK SHELF</span></a>
+      <nav class="view-nav" aria-label="切換頁面">
+        <a href="#add" data-view="add">新增與列表</a>
+        <a href="#search" data-view="search">搜尋與列表</a>
+        <a href="#settings" data-view="settings">設定</a>
+      </nav>
+      <div class="status-pill"><i></i><span>共 <b id="total-count">0</b> 筆 · <span id="owner-name">PRIVATE</span></span></div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">BOOKMARK DEV TOOL</p>
+    <div class="hero-grid">
+      <h1><span>書籤</span><em>收藏櫃</em></h1>
+      <p class="lede">貼上網址，自動抓取標題、摘要與縮圖，再分類並加上標籤。新增與搜尋分頁切換，列表兩邊都看得到。</p>
+    </div>
+  </section>
+
+  <main class="board">
+    <section class="tool-card area-add" data-views="add" aria-labelledby="add-title">
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="add-title">新增書籤</h2><p id="add-desc">輸入網址，抓取資訊後確認再保存</p></div>
+      </div>
+      <form id="fetch-form" class="panel" novalidate>
+        <label for="url-input">網址</label>
+        <div class="field-inline">
+          <input id="url-input" name="url" type="text" inputmode="url" autocomplete="url" placeholder="https://github.com/…" required>
+          <button type="submit">抓取資訊</button>
+        </div>
+        <output id="fetch-status" aria-live="polite"></output>
+      </form>
+
+      <form id="draft-form" class="panel" hidden>
+        <div class="draft-head">
+          <div class="thumb" id="draft-thumb"></div>
+          <div>
+            <span class="badge" id="draft-source"></span>
+            <a id="draft-url" target="_blank" rel="noopener noreferrer"></a>
+          </div>
+        </div>
+        <label for="draft-title">標題</label>
+        <input id="draft-title" maxlength="300" required>
+        <label for="draft-summary">摘要</label>
+        <textarea id="draft-summary" rows="4" maxlength="2000"></textarea>
+        <div class="field-row">
+          <div><label for="draft-category">分類</label><input id="draft-category" list="category-options" maxlength="40"></div>
+          <div><label for="draft-tags">標籤（以逗號分隔）</label><input id="draft-tags" list="tag-options"></div>
+        </div>
+        <label for="draft-thumbnail">縮圖網址</label>
+        <input id="draft-thumbnail" type="url" inputmode="url">
+        <label for="draft-note">備註</label>
+        <textarea id="draft-note" rows="3" maxlength="5000" placeholder="為什麼收藏、之後要做什麼"></textarea>
+        <div class="actions">
+          <button type="submit">保存書籤</button>
+          <button type="button" class="ghost" id="draft-cancel">取消</button>
+        </div>
+        <output id="save-status" aria-live="polite"></output>
+      </form>
+    </section>
+
+    <section class="tool-card accent-blue area-search" data-views="search" aria-labelledby="search-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="search-title">搜尋書籤</h2><p>搜尋標題、摘要、備註、網址、分類與標籤，多個關鍵字以空白分隔</p></div>
+      </div>
+      <form id="search-form" class="panel" role="search">
+        <label for="search-input">關鍵字</label>
+        <div class="field-inline">
+          <input id="search-input" type="search" placeholder="例如：react 動畫" autocomplete="off">
+          <button type="submit">搜尋</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="tool-card accent-green area-browse" data-views="search" aria-labelledby="browse-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="browse-title">分類瀏覽</h2><p>點選任一項目篩選書籤</p></div>
+      </div>
+      <div class="facet">
+        <h3>網站分類</h3>
+        <div class="chips" id="site-chips"></div>
+      </div>
+      <div class="facet">
+        <h3>內容分類</h3>
+        <div class="chips" id="category-chips"></div>
+      </div>
+      <div class="facet">
+        <h3>標籤分類<small>依數量排序</small></h3>
+        <div class="chips" id="tag-chips"></div>
+      </div>
+    </section>
+
+    <section class="tool-card accent-blue area-recent" data-views="add" aria-labelledby="recent-title">
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="recent-title">最近新建</h2><p>最新保存的書籤</p></div>
+      </div>
+      <ul class="mini-list" id="recent-list"></ul>
+    </section>
+
+    <section class="tool-card accent-violet area-clicked" data-views="add" aria-labelledby="clicked-title">
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="clicked-title">最近點擊</h2><p>從這裡開啟過的書籤</p></div>
+      </div>
+      <ul class="mini-list" id="clicked-list"></ul>
+    </section>
+
+    <section class="tool-card accent-navy area-all" id="all" data-views="add search" aria-labelledby="all-title">
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="all-title">全部書籤</h2><p>點網站、分類或標籤可篩選</p></div>
+      </div>
+      <div class="list-toolbar">
+        <div class="chips active-filters" id="active-filters" aria-label="目前的篩選條件"></div>
+        <div class="sort-field">
+          <label for="sort-select">排序</label>
+          <select id="sort-select">
+            <option value="created">最新建立</option>
+            <option value="clicked">最近點擊</option>
+            <option value="popular">點擊最多</option>
+          </select>
+        </div>
+      </div>
+      <output id="list-status" aria-live="polite"></output>
+      <div class="bm-grid" id="bookmark-grid"></div>
+      <button type="button" class="ghost load-more" id="load-more" hidden>載入更多</button>
+    </section>
+
+    <section class="tool-card accent-violet area-profile" data-views="settings" aria-labelledby="profile-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="profile-title">個人資料</h2><p>姓名與 Basic Auth 登入帳號密碼</p></div>
+      </div>
+      <div class="profile-layout">
+        <form id="profile-form" class="panel">
+          <label for="profile-name">姓名</label>
+          <input id="profile-name" maxlength="40" autocomplete="name" placeholder="顯示在頁首右上角">
+          <button type="submit">儲存姓名</button>
+          <output id="profile-status" aria-live="polite"></output>
+        </form>
+        <form id="auth-form" class="panel">
+          <label for="auth-current">目前密碼</label>
+          <input id="auth-current" type="password" autocomplete="current-password" required>
+          <label for="auth-user">帳號</label>
+          <input id="auth-user" autocomplete="username" maxlength="64" required>
+          <label for="auth-pass">新密碼（至少 8 個字元）</label>
+          <input id="auth-pass" type="password" autocomplete="new-password" minlength="8" maxlength="200" required>
+          <label for="auth-pass2">再次輸入新密碼</label>
+          <input id="auth-pass2" type="password" autocomplete="new-password" maxlength="200" required>
+          <p class="hint" id="auth-source"></p>
+          <button type="submit">更新帳號密碼</button>
+          <output id="auth-status" aria-live="polite"></output>
+        </form>
+      </div>
+    </section>
+
+    <section class="tool-card accent-amber area-hooks" data-views="settings" aria-labelledby="hooks-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="hooks-title">Webhook</h2><p>書籤新增、更新、刪除、點擊時，呼叫指定網址</p></div>
+      </div>
+      <div class="hook-layout">
+        <form id="hook-form" class="panel">
+          <label for="hook-name">名稱</label>
+          <input id="hook-name" maxlength="80" placeholder="例如：同步到 Notion">
+          <div class="field-row">
+            <div>
+              <label for="hook-event">事件</label>
+              <select id="hook-event">
+                <option value="*">全部事件</option>
+                <option value="bookmark.created">新增書籤</option>
+                <option value="bookmark.updated">更新書籤</option>
+                <option value="bookmark.deleted">刪除書籤</option>
+                <option value="bookmark.clicked">點擊書籤</option>
+              </select>
+            </div>
+            <div>
+              <label for="hook-method">呼叫方式</label>
+              <select id="hook-method">
+                <option value="POST_JSON">POST JSON</option>
+                <option value="POST_FORM">POST 表單</option>
+                <option value="GET">GET 查詢參數</option>
+              </select>
+            </div>
+          </div>
+          <label for="hook-url">Webhook 網址</label>
+          <input id="hook-url" type="url" inputmode="url" required placeholder="https://example.com/hook">
+          <label for="hook-secret">簽章密鑰（選填）</label>
+          <input id="hook-secret" type="password" autocomplete="new-password" maxlength="200">
+          <p class="hint">有密鑰時，以 HMAC-SHA256 簽署送出的內容（GET 為查詢字串），放在 <code>X-Bookmark-Signature</code>。</p>
+          <button type="submit">新增 Webhook</button>
+          <output id="hook-status" aria-live="polite"></output>
+        </form>
+        <ul class="hook-list" id="hook-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form" method="dialog">
+      <h2 id="edit-title">編輯書籤</h2>
+      <p class="dialog-url" id="edit-url"></p>
+      <label for="edit-title-input">標題</label>
+      <input id="edit-title-input" maxlength="300" required>
+      <label for="edit-summary">摘要</label>
+      <textarea id="edit-summary" rows="4" maxlength="2000"></textarea>
+      <div class="field-row">
+        <div><label for="edit-category">分類</label><input id="edit-category" list="category-options" maxlength="40"></div>
+        <div><label for="edit-tags">標籤（以逗號分隔）</label><input id="edit-tags" list="tag-options"></div>
+      </div>
+      <label for="edit-thumbnail">縮圖網址</label>
+      <input id="edit-thumbnail" type="url" inputmode="url">
+      <label for="edit-note">備註</label>
+      <textarea id="edit-note" rows="3" maxlength="5000"></textarea>
+      <div class="actions">
+        <button type="submit" value="save">儲存</button>
+        <button type="button" class="danger" id="edit-delete">刪除</button>
+        <button type="button" class="ghost" id="edit-close">關閉</button>
+      </div>
+      <output id="edit-status" aria-live="polite"></output>
+    </form>
+  </dialog>
+
+  <datalist id="category-options"></datalist>
+  <datalist id="tag-options"></datalist>
+
+  <footer>書籤收藏櫃<span>·</span>Cloudflare Workers<span>·</span>D1<span>·</span>Workers AI</footer>
+</body>
+</html>
