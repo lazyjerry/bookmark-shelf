@@ -8,6 +8,7 @@
 
 - **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。
 - **應用程式帳密**：在設定頁替每支程式建立一組帳密，以 Basic Auth 呼叫書籤 API（新增、查詢、更新、刪除）；只能呼叫 `/api/bookmarks` 與 `/api/preview`，用不到時個別刪除即可，不必更換登入密碼。每次呼叫都留下紀錄（時間、方法、路徑、狀態碼、書籤 id、IP、User-Agent），在設定頁查看；保留天數與筆數每組各自設定（預設 7 天、700 筆，上限 30 天、10000 筆）。完整說明見 [API.md](API.md)。
+- **VS Code 延伸模組**：在 VS Code 側邊欄瀏覽、搜尋、新增與編輯書籤，以應用程式帳密呼叫書籤 API，見〈[VS Code 延伸模組](#vs-code-延伸模組)〉。
 - **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存（設定頁可開啟「新增書籤時直接保存」，抓取完不經確認直接保存）。AI 失敗或停用時改用爬蟲結果與規則分類。
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
@@ -19,6 +20,20 @@
 - **PWA**：可安裝到桌面或手機主畫面；Android 可從其他 App「分享」網址直接新增。
 - **通知信**：新增書籤時，寄網站資料（標題、網址、網站、分類、標籤、縮圖）與摘要給設定頁指定的收件人。走 Cloudflare Email Routing，只寄得到已驗證的收件地址。
 - **書籤中轉頁**：列表點開書籤時另開分頁到 `/b/<share_id>`，顯示該網站的資料，再按「前往網站」開原網址。這個網址不需登入即可瀏覽，可直接分享；登入時多了登入名稱、返回、編輯與刪除。「分享」可複製網址，或產生一張書籤分享圖（有縮圖、沒縮圖各有版面）儲存或分享。
+
+## 畫面
+
+| 新增與列表 | 搜尋與列表 |
+|---|---|
+| ![新增與列表](docs/screenshots/web-add.png) | ![搜尋與列表](docs/screenshots/web-search.png) |
+
+| 設定 | 書籤中轉頁（免登入） |
+|---|---|
+| ![設定](docs/screenshots/web-settings.png) | ![書籤中轉頁](docs/screenshots/web-share.png) |
+
+手機版（可安裝成 PWA）：
+
+<img src="docs/screenshots/web-mobile.png" width="320" alt="手機版的新增與列表分頁">
 
 ## 部署
 
@@ -170,6 +185,28 @@ curl -u "$AUTH" -X PATCH -H 'Content-Type: application/json' \
 curl -u "$AUTH" -X DELETE https://<你的網域>/api/bookmarks/12                # 刪除
 ```
 
+## VS Code 延伸模組
+
+[Bookmark Shelf](https://marketplace.visualstudio.com/items?itemName=workjerry.bookmark-shelf) 讓你在 VS Code 側邊欄瀏覽、搜尋、新增與編輯書籤，不用切到瀏覽器。它透過書籤 API 與應用程式帳密操作，書籤仍存在你自己部署的 Worker 與 D1。原始碼與問題回報：[lazyjerry/bookmark-shelf-ext](https://github.com/lazyjerry/bookmark-shelf-ext)。
+
+![VS Code 側邊欄的書籤樹，展開一筆書籤看細節](docs/screenshots/ext-tree.png)
+
+- **書籤樹**：活動列的書架圖示開啟。書籤依分類分組，展開可看網址、標題、摘要、分類、標籤、備註、中轉頁與新增時間、點擊次數。
+- **新增**：輸入網址後由伺服器抓取網頁並以 AI 產生標題、摘要、分類與標籤。輸入框預先帶入編輯器選取或剪貼簿裡的網址，編輯器右鍵也有「將選取的網址加入書籤收藏櫃」。
+- **編輯與刪除**：點細節列直接修改標題、摘要、分類、標籤、備註；刪除需確認。
+- **搜尋與篩選**：關鍵字搜尋、依標籤或網站篩選，排序可選最新建立、最近點擊、點擊最多。
+- **開啟與複製**：在瀏覽器開啟原網址或中轉頁 `/b/<share_id>`，複製網址或 Markdown 連結。
+
+### 安裝與連線
+
+1. 在 Marketplace 搜尋「Bookmark Shelf」（發行者 `workjerry`）安裝。
+2. 到本站設定頁「應用程式帳密」建立一組帳密（名稱例如「VS Code」），複製帳號與只顯示一次的密碼。
+3. 點 VS Code 活動列的書架圖示，按「設定連線」，依序輸入網域、帳號、密碼；連線測試通過才儲存。尚未部署時，側邊欄會顯示部署步驟與一鍵部署連結。
+
+<img src="docs/screenshots/ext-welcome.png" width="300" alt="尚未設定連線時的側邊欄：部署步驟與「設定連線」按鈕">
+
+連線設定存在系統鑰匙圈（VS Code SecretStorage），不寫進設定檔、不跟著設定同步。延伸模組只能呼叫書籤 API；從側邊欄開啟原網址不經過 `/go/<id>`，不會增加點擊次數。每次呼叫帶 `User-Agent: bookmark-shelf-vscode/<版本>`，在設定頁的呼叫紀錄可以辨認。指令、設定與限制的完整清單見該 repo 的 README。
+
 ## Webhook
 
 | 事件 | 時機 |
@@ -254,6 +291,7 @@ python3 scripts/generate-icons.py
 
 ```
 ├── API.md                      程式化存取說明（應用程式帳密、書籤 CRUD、呼叫紀錄）
+├── docs/screenshots/           README 的畫面截圖（網站與 VS Code 延伸模組）
 ├── migrations/0001_init.sql    D1 資料表
 ├── migrations/0002_settings.sql 個人設定
 ├── migrations/0003_sessions_passkeys.sql 登入 Session、Passkey、WebAuthn challenge
