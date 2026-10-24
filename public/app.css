@@ -35,8 +35,8 @@ img { max-width: 100%; }
 /* 頁首與首屏 */
 .topbar, .hero, .board, footer { max-width: 1240px; margin-inline: auto; }
 .topbar { padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--navy); text-decoration: none; font: 700 11px/1 monospace; letter-spacing: .18em; }
-.brand-mark { width: 30px; height: 30px; display: grid; place-items: center; color: white; background: var(--coral); border-radius: 50%; letter-spacing: 0; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--navy); text-decoration: none; font-size: 14px; font-weight: 800; line-height: 1; letter-spacing: .1em; }
+.brand-mark { width: 30px; height: 30px; display: block; }
 .status-pill { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 700 10px/1 monospace; letter-spacing: .12em; }
 .status-pill i { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
 .status-pill b { color: var(--navy); font-size: 12px; }

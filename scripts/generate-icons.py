@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""產生 PWA 圖示到 public/icons/。需要 Pillow：python3 -m pip install pillow
+"""產生 PWA 圖示與品牌標記到 public/icons/。需要 Pillow：python3 -m pip install pillow
 
 用法：python3 scripts/generate-icons.py
 """
@@ -36,7 +36,12 @@ def draw(scale: float) -> Image.Image:
     d.ellipse([cx - r + shadow, cy - r + shadow, cx + r + shadow, cy + r + shadow], fill=NAVY)
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=CORAL)
 
-    # 書櫃：白色櫃體、兩層格子、每層幾本高矮不一的書脊。座標與 public/favicon.svg 同一套 32 格系統
+    bookcase(d, cx, cy, r)
+    return img
+
+
+def bookcase(d: ImageDraw.ImageDraw, cx: float, cy: float, r: float) -> None:
+    """書櫃：白色櫃體、兩層格子、每層幾本高矮不一的書脊。座標與 public/favicon.svg 同一套 32 格系統"""
     u = r / 16
     ox, oy = cx - 16 * u, cy - 16 * u
 
@@ -48,6 +53,14 @@ def draw(scale: float) -> Image.Image:
     box(9, 17, 14, 7.5, CORAL)
     for x, y, w, h in BOOKS:
         box(x, y, w, h, WHITE)
+
+
+def draw_mark() -> Image.Image:
+    """透明背景的品牌標記（珊瑚色圓＋書櫃），給通知信頁首用"""
+    img = Image.new("RGBA", (BASE, BASE), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse([0, 0, BASE, BASE], fill=CORAL)
+    bookcase(d, BASE / 2, BASE / 2, BASE / 2)
     return img
 
 
@@ -64,6 +77,7 @@ def main() -> None:
     save(regular, "icon-512.png", 512)
     save(maskable, "icon-maskable-512.png", 512)
     save(maskable, "apple-touch-icon.png", 180)
+    save(draw_mark(), "brand-mark.png", 60)
 
 
 if __name__ == "__main__":

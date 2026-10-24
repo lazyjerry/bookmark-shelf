@@ -413,25 +413,38 @@
     ctx.fillStyle = C.navy;
     ctx.fillRect(left, y, TEXT_W, 2);
     y += 2 + 40;
-    ctx.fillStyle = C.coral;
-    ctx.beginPath();
-    ctx.arc(left + 20, y + 20, 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 20px monospace';
-    ctx.textAlign = 'center';
+    drawBrandMark(ctx, left + 20, y + 20, 20);
     ctx.textBaseline = 'middle';
-    ctx.fillText('B', left + 20, y + 21);
-    ctx.textAlign = 'left';
     ctx.fillStyle = C.navy;
-    ctx.font = '700 20px monospace';
-    ctx.fillText('BOOKMARK SHELF', left + 56, y + 21);
+    ctx.font = `800 22px ${SANS}`;
+    ctx.fillText('書籤收藏櫃', left + 56, y + 21);
     ctx.textAlign = 'right';
     ctx.fillStyle = C.muted;
     ctx.fillText(wrap(ctx, b.host, TEXT_W - 320, 1)[0] || '', left + TEXT_W, y + 21);
     ctx.textAlign = 'left';
 
     return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('無法產生圖片'))), 'image/png'));
+  }
+
+  // 品牌書櫃圖樣：座標與 public/favicon.svg、scripts/generate-icons.py 同一套 32 格系統
+  const BOOKS = [[10, 9.5, 2, 6], [12.5, 10.5, 2.5, 5], [15.5, 9, 2, 6.5], [18, 10.5, 2, 5], [20.5, 9.5, 1.5, 6],
+    [10, 18.5, 2.5, 6], [13, 19.5, 2, 5], [15.5, 18, 2, 6.5], [18, 19, 2.5, 5.5], [21, 18.5, 1, 6]];
+  function drawBrandMark(ctx, cx, cy, r) {
+    const u = r / 16;
+    const ox = cx - 16 * u;
+    const oy = cy - 16 * u;
+    const box = (x, y, w, h, fill) => {
+      ctx.fillStyle = fill;
+      ctx.fillRect(ox + x * u, oy + y * u, w * u, h * u);
+    };
+    ctx.fillStyle = C.coral;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    box(7.5, 6.5, 17, 20, '#ffffff');
+    box(9, 8, 14, 7.5, C.coral);
+    box(9, 17, 14, 7.5, C.coral);
+    for (const [x, y, w, h] of BOOKS) box(x, y, w, h, '#ffffff');
   }
 
   function fileName(b) {

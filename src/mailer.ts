@@ -71,7 +71,7 @@ function compose(bookmark: Bookmark, appUrl: string, test: boolean) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px">
 <tr><td style="padding:0 0 14px;border-bottom:1px solid #d4d2cc">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-    <td style="color:#171e34;${mono};font-size:11px;font-weight:700;letter-spacing:.18em"><span style="display:inline-block;width:30px;height:30px;margin-right:10px;color:#ffffff;background:#ed735f;border-radius:50%;line-height:30px;text-align:center;letter-spacing:0">B</span>BOOKMARK SHELF</td>
+    <td style="color:#171e34;font-size:14px;font-weight:800;letter-spacing:.1em"><img src="${e(appUrl)}/icons/brand-mark.png" alt="" width="30" height="30" style="display:inline-block;width:30px;height:30px;margin-right:10px;vertical-align:middle;border:0">書籤收藏櫃</td>
     <td align="right" style="color:#707486;${mono};font-size:10px;font-weight:700;letter-spacing:.12em"><span style="display:inline-block;width:8px;height:8px;margin-right:6px;background:${test ? '#ae7418' : '#398a70'};border-radius:50%"></span>${test ? 'TEST MAIL' : 'NEW BOOKMARK'}</td>
   </tr></table>
 </td></tr>

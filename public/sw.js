@@ -1,7 +1,7 @@
 'use strict';
 
 // 改了 SHELL 內的檔案就把版本加一，舊快取會在 activate 時清掉
-const CACHE = 'bookmark-shelf-v10';
+const CACHE = 'bookmark-shelf-v11';
 const SHELL = [
   '/app.css',
   '/app.js',
