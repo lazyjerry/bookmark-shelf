@@ -46,6 +46,8 @@
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
     });
+    // Session 過期（例如 PWA 開著放了很久）：回登入頁，登入後回到目前畫面
+    if (res.status === 401) location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new Error(data.error || `請求失敗（HTTP ${res.status}）`);
@@ -545,7 +547,7 @@
       $('profile-name').value = settings.name;
       $('auth-user').value = settings.username;
       $('auth-source').textContent = settings.source === 'database'
-        ? '目前使用這裡設定的帳密。更新後瀏覽器會要求以新帳密重新登入。'
+        ? '目前使用這裡設定的帳密。更新後其他裝置會被登出，需以新帳密重新登入。'
         : '目前使用環境變數 AUTH_USER／AUTH_PASS。在這裡更新後改以這裡為準，環境變數不再生效。';
       showOwner(settings.name);
     } catch (err) {
@@ -593,7 +595,8 @@
       await api('/api/settings/auth', { method: 'PUT', body: { currentPassword: $('auth-current').value, username, password } });
       $('auth-form').reset();
       $('auth-user').value = username;
-      setStatus(status, '已更新。重新整理頁面後，瀏覽器會要求以新帳密登入', 'ok');
+      setStatus(status, '已更新。這台裝置維持登入，其他裝置需以新帳密重新登入', 'ok');
+      loadLogin();
     } catch (err) {
       setStatus(status, err.message, 'error');
     } finally {
@@ -642,6 +645,98 @@
     }
   });
 
+  // 登入方式（設定頁）：Passkey 與登入中的裝置
+  function passkeyItem(passkey) {
+    const used = passkey.last_used_at ? `最近使用 ${timeAgo(passkey.last_used_at)}` : '尚未用來登入';
+    return h('li', {},
+      h('div', { class: 'bm-meta' },
+        h('strong', {}, passkey.name),
+        h('span', { class: 'badge plain' }, passkey.synced ? '已同步' : '僅此驗證器'),
+      ),
+      h('p', { class: 'hint' }, `新增於 ${formatDate(passkey.created_at)} · ${used}`),
+      h('button', { type: 'button', class: 'danger', onclick: async (e) => {
+        if (!confirm(`刪除「${passkey.name}」？刪除後這個 Passkey 就不能登入。`)) return;
+        busy(e.currentTarget, true, '刪除中…');
+        try {
+          const { passkeys } = await api(`/api/settings/passkeys/${encodeURIComponent(passkey.id)}`, { method: 'DELETE' });
+          renderPasskeys(passkeys);
+          setStatus($('session-status'), '已刪除。裝置上的 Passkey 不會自動消失，可到系統的密碼管理一併刪除', 'ok');
+        } catch (err) {
+          setStatus($('session-status'), err.message, 'error');
+          busy(e.currentTarget, false);
+        }
+      } }, '刪除'),
+    );
+  }
+
+  function renderPasskeys(passkeys) {
+    $('passkey-list').replaceChildren(...passkeys.map(passkeyItem));
+    if (!passkeys.length) $('passkey-list').append(h('li', {}, h('p', { class: 'empty' }, '還沒有 Passkey')));
+  }
+
+  function showSessions(count) {
+    $('session-info').textContent = `目前有 ${count} 個登入中的瀏覽器或 App，閒置 30 天後自動登出。程式以 Basic Auth 呼叫不算在內。`;
+  }
+
+  async function loadLogin() {
+    try {
+      const { passkeys, sessions, session } = await api('/api/settings/login');
+      renderPasskeys(passkeys);
+      showSessions(sessions);
+      $('logout').hidden = !session;
+    } catch (err) {
+      setStatus($('session-status'), `無法載入登入方式：${err.message}`, 'error');
+    }
+  }
+
+  if (!window.Passkey || !window.Passkey.supported()) {
+    $('passkey-hint').textContent = '這個瀏覽器不支援 Passkey，請改用 Safari、Chrome、Edge 或 Firefox 的新版本。';
+    $('passkey-form').querySelector('button').disabled = true;
+  }
+
+  $('passkey-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = $('passkey-status');
+    const button = event.submitter || $('passkey-form').querySelector('button');
+    busy(button, true, '等待驗證…');
+    try {
+      const options = await api('/api/settings/passkeys/options', { method: 'POST', body: { currentPassword: $('passkey-current').value } });
+      const response = await window.Passkey.create(options);
+      const { passkeys } = await api('/api/settings/passkeys', { method: 'POST', body: { name: $('passkey-name').value, response } });
+      $('passkey-form').reset();
+      renderPasskeys(passkeys);
+      setStatus(status, '已新增，下次在登入頁按「使用 Passkey 登入」即可', 'ok');
+    } catch (err) {
+      setStatus(status, window.Passkey.message(err), 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
+  $('logout-others').addEventListener('click', async (event) => {
+    if (!confirm('登出這台裝置以外的所有瀏覽器與 App？')) return;
+    const button = event.currentTarget;
+    busy(button, true, '登出中…');
+    try {
+      const { sessions } = await api('/api/settings/sessions', { method: 'DELETE' });
+      showSessions(sessions);
+      setStatus($('session-status'), '其他裝置已登出', 'ok');
+    } catch (err) {
+      setStatus($('session-status'), err.message, 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
+  $('logout').addEventListener('click', async (event) => {
+    busy(event.currentTarget, true, '登出中…');
+    try {
+      await api('/api/auth/logout', { method: 'POST', body: {} });
+    } finally {
+      location.replace('/login');
+    }
+  });
+
   // 從 /go/ 開新分頁點擊後回到本頁，更新「最近點擊」
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadOverview();
@@ -668,5 +763,6 @@
   // Webhook 介面暫時隱藏，恢復時加回 loadHooks()
   loadSettings();
   loadMail();
+  loadLogin();
   handleSharedUrl();
 })();

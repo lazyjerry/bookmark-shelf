@@ -1,17 +1,17 @@
 # 書籤收藏櫃 Bookmark Shelf
 
-蒐集平時不會用到，但是可能會有需要的網站、點子、功能與靈感。貼上網址，自動抓取標題、摘要與縮圖，再由 Workers AI 分類並加上標籤。跑在 Cloudflare Workers + D1，整站以 Basic Auth 保護，可安裝成 PWA。
+蒐集平時不會用到，但是可能會有需要的網站、點子、功能與靈感。貼上網址，自動抓取標題、摘要與縮圖，再由 Workers AI 分類並加上標籤。跑在 Cloudflare Workers + D1，整站需登入（密碼或 Passkey），可安裝成 PWA。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lazyjerry/bookmark-shelf)
 
 ## 功能
 
-- **Basic Auth 登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。登入帳密可在設定頁更新（存進 D1，以 PBKDF2 雜湊），存過後以 D1 為準。
+- **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密可在設定頁更新（存進 D1，以 PBKDF2 雜湊），存過後以 D1 為準。
 - **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存。AI 失敗或停用時改用爬蟲結果與規則分類。
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
   - **搜尋與列表**：以搜尋為主，附網站分類（GitHub、Threads、Instagram……）、內容分類、標籤分類（依數量排序）與全部書籤。
-  - **設定**：個人資料（姓名、登入帳號密碼）與通知信。
+  - **設定**：個人資料（姓名、登入帳號密碼）、登入方式（Passkey、登出其他裝置）與通知信。
 - **欄位**：網址、標題、摘要、分類、標籤、備註、縮圖（`og:image`）、favicon，另記點擊次數與時間。
 - **網域擴充器**：針對特定網域改寫抓取與摘要規則，內建 GitHub（API、README、topics，可讀 Private Repo）與 YouTube（oEmbed）。
 - **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。設定介面目前隱藏，API 仍可使用。
@@ -84,7 +84,7 @@ npm run typecheck
 ## 隱私與安全
 
 - 書籤只存在你自己帳號的 D1，不經過第三方服務；AI 推論使用你帳號的 Workers AI。
-- 寫入 API 只接受同源、`Content-Type: application/json` 的請求，避免瀏覽器自動帶 Basic Auth 被跨站利用。
+- 寫入 API 只接受同源、`Content-Type: application/json` 的請求，避免瀏覽器自動帶 Cookie 或 Basic Auth 被跨站利用。
 - 縮圖與 favicon 只接受 http(s) 網址；頁面以 `textContent` 呈現使用者資料。
 - `manifest.webmanifest`、`sw.js`、`offline.html`、`app.css`、`app.js`、`favicon.svg` 與 `/icons/*` 不需登入（瀏覽器抓 manifest 與圖示時不帶認證，擋住會無法安裝 PWA）。這些檔案不含任何書籤資料。
 - Webhook 的簽章密鑰不會回傳到前端。
@@ -93,10 +93,17 @@ npm run typecheck
   ```bash
   npx wrangler d1 execute DB --remote --command "DELETE FROM settings WHERE key IN ('auth_user', 'auth_hash')"
   ```
+- 登入頁（`/login`、`login.js`、`passkey.js`）與 `/api/auth/*` 不需登入。未登入的頁面導覽轉到登入頁，登入後回到原網址（含 PWA 分享進來的網址）；瀏覽器的 API 請求回 401 但不帶 `WWW-Authenticate`，不會跳出瀏覽器內建的登入框。
+- Session Cookie 為 `__Host-` 前綴、`HttpOnly`、`Secure`、`SameSite=Lax`，帶 `Max-Age`（iOS 主畫面 App 被系統關掉後，沒有效期的 Cookie 會消失）。D1 只存 token 的 SHA-256。更新帳密時，其他裝置的 Session 一併登出。
+- Passkey 要求使用者驗證（生物辨識或裝置 PIN，伺服器分不出是哪一種），新增時需再輸入目前密碼；challenge 5 分鐘內有效、只能用一次。密碼一直都能登入；遺失裝置時在設定頁刪除該 Passkey，或：
+
+  ```bash
+  npx wrangler d1 execute DB --remote --command "DELETE FROM passkeys; DELETE FROM sessions"
+  ```
 
 ## API
 
-全部需要 Basic Auth。寫入請求需帶 `Content-Type: application/json`。
+除了 `/api/auth/*` 之外都需登入：程式呼叫帶 Basic Auth，瀏覽器用登入頁換到的 Session Cookie。寫入請求需帶 `Content-Type: application/json`。
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
@@ -113,6 +120,13 @@ npm run typecheck
 | `PUT` | `/api/settings/auth` | `{ "currentPassword", "username", "password" }` 更新登入帳密 |
 | `GET` `PUT` | `/api/settings/mail` | 讀取、更新通知信 `{ "from", "to" }`（`to` 為陣列，或以換行、逗號分隔的字串，最多 10 個） |
 | `POST` | `/api/settings/mail/test` | 以最新一筆書籤寄測試信，回傳每個收件地址的結果 |
+| `POST` | `/api/auth/login` | `{ "username", "password" }` 登入，發 Session Cookie（免登入） |
+| `POST` | `/api/auth/passkey/options`、`/api/auth/passkey` | Passkey 登入：取得 challenge、送出驗證結果（免登入） |
+| `POST` | `/api/auth/logout` | 登出目前的 Session（免登入） |
+| `GET` | `/api/settings/login` | 已新增的 Passkey 與登入中的 Session 數 |
+| `POST` | `/api/settings/passkeys/options`、`/api/settings/passkeys` | 新增 Passkey：`{ "currentPassword" }` 取得選項，再送 `{ "name", "response" }` |
+| `DELETE` | `/api/settings/passkeys/:id` | 刪除 Passkey |
+| `DELETE` | `/api/settings/sessions` | 登出目前這個以外的所有 Session |
 
 例如用捷徑或腳本直接收藏：
 
@@ -198,12 +212,15 @@ python3 scripts/generate-icons.py
 - Instagram、Threads 等站的縮圖是有時效的 CDN 網址，過一段時間可能失效，可在編輯畫面改縮圖網址。
 - 需要登入或以 JavaScript 產生內容的頁面，爬蟲只能拿到公開的 meta。
 - 搜尋使用子字串比對，適合個人規模的書籤量（數千筆內）。
+- Passkey 綁定網域：`*.workers.dev` 與自訂網域是不同的 Passkey，要各自在設定頁新增。
+- 曾用舊版 Basic Auth 登入過的瀏覽器會一直自動帶舊帳密，「登出」清不掉，要關閉瀏覽器或清除網站資料。
 
 ## 專案結構
 
 ```
 ├── migrations/0001_init.sql    D1 資料表
 ├── migrations/0002_settings.sql 個人設定與登入帳密
+├── migrations/0003_sessions_passkeys.sql 登入 Session、Passkey、WebAuthn challenge
 ├── public/                     前端頁面、PWA manifest、Service Worker、圖示
 ├── scripts/generate-icons.py   產生 PWA 圖示
 ├── src/
@@ -216,6 +233,8 @@ python3 scripts/generate-icons.py
 │   ├── webhooks.ts             Webhook 呼叫與簽章
 │   ├── mailer.ts               新增書籤通知信
 │   ├── settings.ts             個人設定、登入帳密雜湊與驗證
+│   ├── session.ts              瀏覽器登入的 Session Cookie
+│   ├── passkeys.ts             Passkey（WebAuthn）註冊與驗證
 │   └── extractors/             網域擴充器
 └── wrangler.jsonc
 ```

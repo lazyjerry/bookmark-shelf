@@ -14,10 +14,16 @@ import { checkCredentials, getSettings, loadCredentials, putSettings, saveCreden
 import { hostOf, siteOf } from './sites';
 import type { Bookmark } from './types';
 import { dispatchEvent, testWebhook, WEBHOOK_EVENTS, WEBHOOK_METHODS, type Webhook, type WebhookEvent } from './webhooks';
+import {
+  authenticatePasskey, authenticationOptions, deletePasskey, listPasskeys, PasskeyError, registerPasskey, registrationOptions,
+} from './passkeys';
+import { countSessions, createSession, destroyOtherSessions, destroySession, readSession, renewSession } from './session';
 
-type AppContext = Context<{ Bindings: Env }>;
+/** sessionId：以 Session Cookie 登入時才有，Basic Auth 呼叫沒有 */
+type AppEnv = { Bindings: Env; Variables: { sessionId?: string } };
+type AppContext = Context<AppEnv>;
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
 
 class BadRequest extends Error {}
 
@@ -73,15 +79,34 @@ app.use('*', async (c, next) => {
   c.header('Referrer-Policy', 'no-referrer');
 });
 
-// PWA 需要的靜態檔不含資料，開放免登入：瀏覽器抓 manifest 與圖示時預設不帶認證，擋住會無法安裝
-const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/sw.js', '/offline.html', '/favicon.svg', '/app.css', '/app.js']);
+// PWA 需要的靜態檔不含資料，開放免登入：瀏覽器抓 manifest 與圖示時預設不帶認證，擋住會無法安裝。登入頁與其腳本同樣免登入
+const PUBLIC_PATHS = new Set(['/manifest.webmanifest', '/sw.js', '/offline.html', '/favicon.svg', '/app.css', '/app.js', '/login', '/login.js', '/passkey.js']);
+// 登入頁呼叫的 API（POST），尚未登入也要能用
+const AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/passkey/options', '/api/auth/passkey', '/api/auth/logout']);
 
-// 整站 Basic Auth。帳密以設定頁存進 D1 的為準，沒有時用 AUTH_USER／AUTH_PASS；都沒設定時拒絕所有請求，不預設開放
+// 整站需登入。瀏覽器在登入頁以密碼或 Passkey 換 Session Cookie；程式呼叫（捷徑、curl）照舊帶 Basic Auth。
+// 帳密以設定頁存進 D1 的為準，沒有時用 AUTH_USER／AUTH_PASS；都沒設定時拒絕所有請求，不預設開放
 app.use('*', async (c, next) => {
   if (c.req.method === 'GET' && (PUBLIC_PATHS.has(c.req.path) || c.req.path.startsWith('/icons/'))) return next();
+  if (c.req.method === 'POST' && AUTH_PATHS.has(c.req.path)) return next();
+
+  const session = await readSession(c);
+  if (session) {
+    c.set('sessionId', session.id);
+    await next();
+    if (session.renew) await renewSession(c, session);
+    return;
+  }
+
   const creds = await loadCredentials(c.env);
   if (!creds) return c.text('尚未設定 AUTH_PASS，請以 wrangler secret put AUTH_PASS 設定登入密碼。', 503);
-  return basicAuth({ realm: 'Bookmark Shelf', verifyUser: (username, password) => checkCredentials(creds, username, password) })(c, next);
+  const auth = basicAuth({ realm: 'Bookmark Shelf', verifyUser: (username, password) => checkCredentials(creds, username, password) });
+  if (c.req.header('Authorization')) return auth(c, next);
+  // 瀏覽器（帶 Sec-Fetch-Mode）不回 Basic Auth 的 401 挑戰，否則會跳出瀏覽器內建的登入框；頁面導向登入頁，登入後回到原網址
+  const mode = c.req.header('Sec-Fetch-Mode');
+  if (mode === 'navigate') return c.redirect(`/login?next=${encodeURIComponent(c.req.path + new URL(c.req.url).search)}`, 302);
+  if (mode) return c.json({ error: '尚未登入或登入已過期' }, 401);
+  return auth(c, next);
 });
 
 // 瀏覽器會自動帶 Basic Auth，寫入 API 需擋跨站請求：同源檢查＋強制 JSON（跨站表單送不出 JSON）
@@ -278,6 +303,8 @@ app.put('/api/settings/auth', async (c) => {
   if (!username || username.includes(':')) throw new BadRequest('帳號不能空白，也不能含冒號');
   if (password.length < 8 || password.length > 200) throw new BadRequest('新密碼需為 8 到 200 個字元');
   await saveCredentials(c.env.DB, username, password);
+  // 改密碼通常是擔心外洩，其他裝置的 Session 一併登出，只留目前這個
+  await destroyOtherSessions(c.env.DB, c.get('sessionId'));
   return c.json({ ok: true, username });
 });
 
@@ -306,12 +333,74 @@ app.post('/api/settings/mail/test', async (c) => {
   return c.json({ results });
 });
 
+function passkeyResponse<T>(body: Record<string, unknown>): T {
+  const response = body.response as { id?: unknown } | undefined;
+  if (!response || typeof response !== 'object' || typeof response.id !== 'string') throw new BadRequest('缺少 Passkey 回應');
+  return response as T;
+}
+
+// 登入頁：密碼或 Passkey 換 Session Cookie（30 天，使用中自動延長）
+app.post('/api/auth/login', async (c) => {
+  const body = await readJson(c);
+  const username = typeof body.username === 'string' ? body.username : '';
+  const password = typeof body.password === 'string' ? body.password : '';
+  const creds = await loadCredentials(c.env);
+  if (!creds) return c.json({ error: '尚未設定 AUTH_PASS' }, 503);
+  if (!(await checkCredentials(creds, username, password))) return c.json({ error: '帳號或密碼不正確' }, 401);
+  await createSession(c, 'password');
+  return c.json({ ok: true });
+});
+
+app.post('/api/auth/passkey/options', async (c) => c.json(await authenticationOptions(c.env.DB, c.req.url)));
+
+app.post('/api/auth/passkey', async (c) => {
+  await authenticatePasskey(c.env.DB, c.req.url, passkeyResponse(await readJson(c)));
+  await createSession(c, 'passkey');
+  return c.json({ ok: true });
+});
+
+app.post('/api/auth/logout', async (c) => {
+  await destroySession(c);
+  return c.json({ ok: true });
+});
+
+// 設定頁：Passkey 與登入中的裝置
+app.get('/api/settings/login', async (c) => {
+  const [passkeys, sessions] = await Promise.all([listPasskeys(c.env.DB), countSessions(c.env.DB)]);
+  return c.json({ passkeys, sessions, session: Boolean(c.get('sessionId')) });
+});
+
+// 新增 Passkey 等於多一種登入方式，跟改密碼一樣要再輸入目前密碼
+app.post('/api/settings/passkeys/options', async (c) => {
+  const body = await readJson(c);
+  const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+  const creds = await loadCredentials(c.env);
+  if (!creds || !(await checkCredentials(creds, creds.username, current))) return c.json({ error: '目前密碼不正確' }, 403);
+  return c.json(await registrationOptions(c.env.DB, c.req.url, creds.username));
+});
+
+app.post('/api/settings/passkeys', async (c) => {
+  const body = await readJson(c);
+  await registerPasskey(c.env.DB, c.req.url, passkeyResponse(body), text(body.name, 60));
+  return c.json({ passkeys: await listPasskeys(c.env.DB) }, 201);
+});
+
+app.delete('/api/settings/passkeys/:id', async (c) => {
+  if (!(await deletePasskey(c.env.DB, c.req.param('id')))) return c.json({ error: '找不到這個 Passkey' }, 404);
+  return c.json({ passkeys: await listPasskeys(c.env.DB) });
+});
+
+app.delete('/api/settings/sessions', async (c) => {
+  await destroyOtherSessions(c.env.DB, c.get('sessionId'));
+  return c.json({ sessions: await countSessions(c.env.DB) });
+});
+
 app.all('/api/*', (c) => c.json({ error: '找不到這個 API' }, 404));
 
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.onError((err, c) => {
-  if (err instanceof BadRequest || err instanceof CrawlError) return c.json({ error: err.message }, 400);
+  if (err instanceof BadRequest || err instanceof CrawlError || err instanceof PasskeyError) return c.json({ error: err.message }, 400);
   // basicAuth 的 401 等 HTTPException 帶有自己的回應
   if (err instanceof HTTPException) return err.getResponse();
   // 同一網址同時送出兩次，第二筆撞到 UNIQUE

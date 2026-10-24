@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#171e34">
+  <title>登入｜書籤收藏櫃</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="書籤收藏">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/passkey.js" defer></script>
+  <script src="/login.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="topbar">
+      <a class="brand" href="/" aria-label="書籤收藏櫃首頁"><span class="brand-mark">B</span><span>BOOKMARK SHELF</span></a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">SIGN IN</p>
+    <div class="hero-grid">
+      <h1><span>書籤</span><em>收藏櫃</em></h1>
+      <p class="lede">登入後 30 天內不必再輸入，每次使用會自動延長。</p>
+    </div>
+  </section>
+
+  <main class="board login-board">
+    <section class="tool-card accent-blue area-login-page" aria-labelledby="login-title">
+      <div class="card-heading">
+        <div><h2 id="login-title">登入</h2><p>使用 Passkey（Face ID、Touch ID、Windows Hello），或輸入帳號密碼</p></div>
+      </div>
+      <div class="panel" id="passkey-panel" hidden>
+        <button type="button" id="passkey-login">使用 Passkey 登入</button>
+        <p class="hint">Passkey 要先在設定頁新增。同步到 iCloud 鑰匙圈或 Google 密碼管理工具的 Passkey，其他裝置也能用。</p>
+      </div>
+      <form id="login-form" class="panel">
+        <label for="login-user">帳號</label>
+        <input id="login-user" autocomplete="username" maxlength="64" required>
+        <label for="login-pass">密碼</label>
+        <input id="login-pass" type="password" autocomplete="current-password" maxlength="200" required>
+        <button type="submit">登入</button>
+      </form>
+      <output id="login-status" aria-live="polite"></output>
+    </section>
+  </main>
+
+  <footer>書籤收藏櫃<span>·</span>Cloudflare Workers<span>·</span>D1<span>·</span>Workers AI</footer>
+</body>
+</html>
