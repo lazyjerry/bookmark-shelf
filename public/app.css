@@ -276,6 +276,8 @@ footer span { padding: 0 8px; }
 .app-log-list li.fail { border-left-color: var(--red); }
 .app-log-list code { font: 12px/1.4 monospace; color: var(--navy); overflow-wrap: anywhere; }
 .app-log-list .log-ua { font-size: 11px; overflow-wrap: anywhere; }
+.link-button { min-height: 46px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--navy); border: 1px solid var(--field); font-weight: 800; text-decoration: none; transition: transform .12s, background .12s; }
+.link-button:hover { color: white; background: var(--accent); border-color: var(--accent); transform: translateY(-2px); }
 @media (max-width: 760px) {
   .passkey-list li > .app-actions { grid-column: 1; grid-row: auto; }
 }
