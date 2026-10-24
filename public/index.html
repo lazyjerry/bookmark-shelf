@@ -186,7 +186,7 @@
           <input id="passkey-current" type="password" autocomplete="current-password" required>
           <label for="passkey-name">名稱</label>
           <input id="passkey-name" maxlength="60" placeholder="例如 iPhone、MacBook">
-          <p class="hint" id="passkey-hint">新增後，登入頁可以直接用這台裝置的生物辨識或螢幕鎖定登入。密碼仍然可以登入，遺失裝置時在右側刪除即可。</p>
+          <p class="hint" id="passkey-hint">新增後，登入頁可以直接用這台裝置的生物辨識或螢幕鎖定登入。瀏覽器詢問存放位置時選 iCloud 鑰匙圈或 Google 密碼管理工具，同帳號的其他裝置也能用（列表會標示「已同步」）。密碼仍然可以登入，遺失裝置時在右側刪除即可。</p>
           <button type="submit">新增 Passkey</button>
           <output id="passkey-status" aria-live="polite"></output>
         </form>
@@ -199,6 +199,35 @@
             <button type="button" class="danger" id="logout" hidden>登出</button>
           </div>
           <output id="session-status" aria-live="polite"></output>
+        </div>
+      </div>
+    </section>
+
+    <section class="tool-card accent-amber area-apps" data-views="settings" aria-labelledby="apps-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="apps-title">應用程式帳密</h2><p>給捷徑、腳本等程式呼叫書籤 API，以 Basic Auth 帶在 Authorization header</p></div>
+      </div>
+      <div class="login-layout">
+        <form id="app-form" class="panel">
+          <label for="app-current">目前密碼</label>
+          <input id="app-current" type="password" autocomplete="current-password" required>
+          <label for="app-name">名稱</label>
+          <input id="app-name" maxlength="60" required placeholder="例如 iOS 捷徑、備份腳本">
+          <div class="field-row">
+            <div><label for="app-new-days">紀錄保留天數（1–30）</label><input id="app-new-days" type="number" min="1" max="30" step="1" value="7" required></div>
+            <div><label for="app-new-limit">紀錄保留筆數（1–10000）</label><input id="app-new-limit" type="number" min="1" max="10000" step="1" value="700" required></div>
+          </div>
+          <p class="hint">帳號與密碼由系統產生。密碼只在建立後顯示這一次，伺服器只保存雜湊，之後無法再查看；遺失時刪除重建即可。只能呼叫 <code>/api/bookmarks</code> 與 <code>/api/preview</code>，不能變更設定。每次呼叫都會留下紀錄，超過保留天數或筆數的自動刪除。</p>
+          <button type="submit">建立帳密</button>
+          <output id="app-status" aria-live="polite"></output>
+          <div class="app-secret" id="app-secret" hidden></div>
+        </form>
+        <div class="panel">
+          <strong>已建立的應用程式帳密</strong>
+          <ul class="passkey-list" id="app-list"></ul>
+          <p class="hint">更換 <code>AUTH_PASS</code> 不會讓這些帳密失效，不再使用的請在這裡刪除。</p>
+          <output id="app-list-status" aria-live="polite"></output>
         </div>
       </div>
     </section>
@@ -299,6 +328,26 @@
         <button type="button" class="ghost" id="edit-close">關閉</button>
       </div>
       <output id="edit-status" aria-live="polite"></output>
+    </form>
+  </dialog>
+
+  <dialog id="app-dialog" aria-labelledby="app-dialog-title">
+    <form id="app-retention-form" method="dialog">
+      <h2 id="app-dialog-title">呼叫紀錄</h2>
+      <p class="dialog-url" id="app-dialog-user"></p>
+      <div class="field-row">
+        <div><label for="app-log-days">保留天數（1–30）</label><input id="app-log-days" type="number" min="1" max="30" step="1" required></div>
+        <div><label for="app-log-limit">保留筆數（1–10000）</label><input id="app-log-limit" type="number" min="1" max="10000" step="1" required></div>
+      </div>
+      <p class="hint">超過天數或筆數的紀錄會自動刪除，調小時立即生效。</p>
+      <div class="actions">
+        <button type="submit" value="save">儲存保留設定</button>
+        <button type="button" class="ghost" id="app-dialog-close">關閉</button>
+      </div>
+      <output id="app-dialog-status" aria-live="polite"></output>
+      <strong id="app-log-summary"></strong>
+      <ul class="app-log-list" id="app-log-list"></ul>
+      <button type="button" class="ghost" id="app-log-more" hidden>載入更多</button>
     </form>
   </dialog>
 

@@ -754,6 +754,159 @@
     }
   });
 
+  // 應用程式帳密（設定頁）：密碼只在建立後顯示一次
+  function appItem(app) {
+    const used = app.last_used_at ? `最近使用 ${timeAgo(app.last_used_at)}` : '尚未使用';
+    return h('li', {},
+      h('div', { class: 'bm-meta' }, h('strong', {}, app.name), h('code', {}, app.username)),
+      h('p', { class: 'hint' }, `建立於 ${formatDate(app.created_at)} · ${used} · 紀錄保留 ${app.log_days} 天／${app.log_limit} 筆`),
+      h('div', { class: 'app-actions' },
+        h('button', { type: 'button', class: 'ghost', onclick: () => openAppLogs(app) }, '紀錄'),
+        h('button', { type: 'button', class: 'danger', onclick: async (e) => {
+          if (!confirm(`刪除「${app.name}」？使用這組帳密的程式會立即無法呼叫，呼叫紀錄也會一併刪除。`)) return;
+          // await 之後 e.currentTarget 會變成 null，先存起來
+          const button = e.currentTarget;
+          busy(button, true, '刪除中…');
+          try {
+            const { apps } = await api(`/api/settings/apps/${app.id}`, { method: 'DELETE' });
+            renderApps(apps);
+            setStatus($('app-list-status'), '已刪除', 'ok');
+          } catch (err) {
+            setStatus($('app-list-status'), err.message, 'error');
+            busy(button, false);
+          }
+        } }, '刪除'),
+      ),
+    );
+  }
+
+  function renderApps(apps) {
+    $('app-list').replaceChildren(...apps.map(appItem));
+    if (!apps.length) $('app-list').append(h('li', {}, h('p', { class: 'empty' }, '還沒有應用程式帳密')));
+  }
+
+  function secretRow(label, value) {
+    const button = h('button', { type: 'button', class: 'ghost' }, '複製');
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(value);
+        button.textContent = '已複製';
+      } catch {
+        button.textContent = '請手動選取';
+      }
+    });
+    return h('div', { class: 'secret-row' }, h('span', {}, label), h('code', {}, value), button);
+  }
+
+  function showAppSecret(app, password) {
+    const example = `curl -u '${app.username}:${password}' -H 'Content-Type: application/json' \\\n  -d '{"url":"https://example.com/"}' ${location.origin}/api/bookmarks`;
+    $('app-secret').replaceChildren(
+      h('strong', {}, '請立即複製保存，離開或重新整理後就看不到密碼'),
+      secretRow('帳號', app.username),
+      secretRow('密碼', password),
+      h('pre', {}, example),
+    );
+    $('app-secret').hidden = false;
+  }
+
+  async function loadApps() {
+    try {
+      const { apps } = await api('/api/settings/apps');
+      renderApps(apps);
+    } catch (err) {
+      setStatus($('app-list-status'), `無法載入應用程式帳密：${err.message}`, 'error');
+    }
+  }
+
+  $('app-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.submitter || $('app-form').querySelector('button');
+    busy(button, true, '建立中…');
+    try {
+      const { app, password, apps } = await api('/api/settings/apps', {
+        method: 'POST',
+        body: { currentPassword: $('app-current').value, name: $('app-name').value, logDays: $('app-new-days').value, logLimit: $('app-new-limit').value },
+      });
+      $('app-form').reset();
+      renderApps(apps);
+      showAppSecret(app, password);
+      setStatus($('app-status'), `已建立「${app.name}」`, 'ok');
+    } catch (err) {
+      setStatus($('app-status'), err.message, 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
+  // 應用程式帳密的呼叫紀錄與保留設定（對話框）
+  const LOG_PAGE = 50;
+  const logTimeFormat = new Intl.DateTimeFormat('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const appLogs = { app: null, offset: 0 };
+
+  function appLogItem(log) {
+    const detail = [logTimeFormat.format(new Date(log.created_at)), log.bookmark_id ? `書籤 #${log.bookmark_id}` : '', log.ip, `${log.duration_ms} ms`];
+    return h('li', { class: log.status >= 400 ? 'fail' : '' },
+      h('div', { class: 'bm-meta' }, h('span', { class: 'badge plain' }, String(log.status)), h('strong', {}, log.method), h('code', {}, log.path)),
+      h('p', { class: 'hint' }, detail.filter(Boolean).join(' · ')),
+      log.user_agent ? h('p', { class: 'hint log-ua' }, log.user_agent) : null,
+    );
+  }
+
+  async function loadAppLogs(reset) {
+    if (reset) {
+      appLogs.offset = 0;
+      $('app-log-list').replaceChildren();
+    }
+    const more = $('app-log-more');
+    busy(more, true, '載入中…');
+    try {
+      const { logs, total } = await api(`/api/settings/apps/${appLogs.app.id}/logs?limit=${LOG_PAGE}&offset=${appLogs.offset}`);
+      appLogs.offset += logs.length;
+      $('app-log-list').append(...logs.map(appLogItem));
+      $('app-log-summary').textContent = total ? `共 ${total} 筆紀錄，最新的在最上面` : '還沒有呼叫紀錄';
+      more.hidden = appLogs.offset >= total;
+    } catch (err) {
+      setStatus($('app-dialog-status'), `無法載入紀錄：${err.message}`, 'error');
+    } finally {
+      busy(more, false);
+    }
+  }
+
+  function openAppLogs(app) {
+    appLogs.app = app;
+    $('app-dialog-title').textContent = `${app.name} 的呼叫紀錄`;
+    $('app-dialog-user').textContent = app.username;
+    $('app-log-days').value = app.log_days;
+    $('app-log-limit').value = app.log_limit;
+    setStatus($('app-dialog-status'), '');
+    $('app-log-summary').textContent = '';
+    $('app-dialog').showModal();
+    loadAppLogs(true);
+  }
+
+  $('app-retention-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.submitter || $('app-retention-form').querySelector('button[type=submit]');
+    busy(button, true, '儲存中…');
+    try {
+      const { app, apps } = await api(`/api/settings/apps/${appLogs.app.id}`, {
+        method: 'PATCH',
+        body: { logDays: $('app-log-days').value, logLimit: $('app-log-limit').value },
+      });
+      appLogs.app = app;
+      renderApps(apps);
+      setStatus($('app-dialog-status'), `已儲存，保留 ${app.log_days} 天、最多 ${app.log_limit} 筆`, 'ok');
+      loadAppLogs(true);
+    } catch (err) {
+      setStatus($('app-dialog-status'), err.message, 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
+  $('app-log-more').addEventListener('click', () => loadAppLogs(false));
+  $('app-dialog-close').addEventListener('click', () => $('app-dialog').close());
+
   // 從中轉頁開新分頁點擊後回到本頁，更新「最近點擊」
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadOverview();
@@ -786,6 +939,7 @@
   const settingsLoaded = loadSettings();
   loadMail();
   loadLogin();
+  loadApps();
   // 分享進來的網址要等設定載入，才知道要不要直接保存
   settingsLoaded.then(handleSharedUrl);
 })();

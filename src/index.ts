@@ -2,6 +2,10 @@ import { Hono, type Context } from 'hono';
 import { basicAuth } from 'hono/basic-auth';
 import { HTTPException } from 'hono/http-exception';
 import { aiEnabled } from './ai';
+import {
+  countAppCredentials, createAppCredential, deleteAppCredential, listAppCredentials, listAppLogs, LOG_DEFAULTS, LOG_MAX, MAX_APP_CREDENTIALS, recordAppLog,
+  touchAppCredential, updateAppCredential, verifyAppCredential, type AppCredential, type LogRetention,
+} from './apps';
 import { CrawlError, normalizeUrl, safeUrl } from './crawler';
 import {
   deleteBookmark, findIdByUrl, getBookmark, getOverview, insertBookmark, listBookmarks, normalizeTags, recordClick,
@@ -10,7 +14,7 @@ import {
 import { buildDraft } from './enrich';
 import { EXTRACTORS } from './extractors';
 import { isEmail, loadMailSettings, MAX_RECIPIENTS, saveMailSettings, sendBookmarkMail } from './mailer';
-import { checkCredentials, getSettings, loadCredentials, putSettings } from './settings';
+import { checkCredentials, getSettings, loadCredentials, putSettings, type Credentials } from './settings';
 import { hostOf, siteOf } from './sites';
 import type { Bookmark } from './types';
 import { dispatchEvent, testWebhook, WEBHOOK_EVENTS, WEBHOOK_METHODS, type Webhook, type WebhookEvent } from './webhooks';
@@ -20,8 +24,8 @@ import {
 import { countSessions, createSession, destroyOtherSessions, destroySession, readSession, renewSession } from './session';
 import { findShared, publicBookmark, thumbnailResponse, viewPage } from './share';
 
-/** sessionId：以 Session Cookie 登入時才有，Basic Auth 呼叫沒有 */
-type AppEnv = { Bindings: Env; Variables: { sessionId?: string } };
+/** sessionId：以 Session Cookie 登入時才有，Basic Auth 呼叫沒有。appCredential：以應用程式帳密呼叫時才有 */
+type AppEnv = { Bindings: Env; Variables: { sessionId?: string; appCredential?: AppCredential } };
 type AppContext = Context<AppEnv>;
 
 const app = new Hono<AppEnv>();
@@ -104,7 +108,7 @@ app.use('*', async (c, next) => {
 
   const creds = await loadCredentials(c.env);
   if (!creds) return c.text('尚未設定 AUTH_PASS，請以 wrangler secret put AUTH_PASS 設定登入密碼。', 503);
-  const auth = basicAuth({ realm: 'Bookmark Shelf', verifyUser: (username, password) => checkCredentials(creds, username, password) });
+  const auth = basicAuth({ realm: 'Bookmark Shelf', verifyUser: (username, password) => verifyBasic(c, creds, username, password) });
   if (c.req.header('Authorization')) return auth(c, next);
   // 瀏覽器（帶 Sec-Fetch-Mode）不回 Basic Auth 的 401 挑戰，否則會跳出瀏覽器內建的登入框；頁面導向登入頁，登入後回到原網址
   const mode = c.req.header('Sec-Fetch-Mode');
@@ -112,6 +116,53 @@ app.use('*', async (c, next) => {
   if (mode) return c.json({ error: '尚未登入或登入已過期' }, 401);
   return auth(c, next);
 });
+
+// Basic Auth 先比對 AUTH_USER／AUTH_PASS，不符再查應用程式帳密
+async function verifyBasic(c: AppContext, creds: Credentials, username: string, password: string): Promise<boolean> {
+  if (await checkCredentials(creds, username, password)) return true;
+  const credential = await verifyAppCredential(c.env.DB, username, password);
+  if (credential) c.set('appCredential', credential);
+  return Boolean(credential);
+}
+
+// 應用程式帳密只能呼叫書籤 API，不能改設定、新增帳密或 Passkey
+const APP_PATH = /^\/api\/(bookmarks(\/[^/]+)?|preview)$/;
+
+// 每次呼叫都記一筆（含被擋下的 403），回應送出後才在背景寫入
+app.use('*', async (c, next) => {
+  const credential = c.get('appCredential');
+  if (!credential) return next();
+  const started = Date.now();
+  if (!APP_PATH.test(c.req.path)) {
+    const res = c.json({ error: '應用程式帳密只能呼叫 /api/bookmarks 與 /api/preview' }, 403);
+    logAppCall(c, credential, res, started);
+    return res;
+  }
+  await next();
+  logAppCall(c, credential, c.res, started);
+});
+
+function logAppCall(c: AppContext, credential: AppCredential, res: Response, started: number) {
+  const url = new URL(c.req.url);
+  const pathId = c.req.path.match(/^\/api\/bookmarks\/(\d+)$/)?.[1];
+  // 新增書籤的 id 只在回應裡（重複網址的 409 也帶 id），要在回應送出前複製一份
+  const created = c.req.method === 'POST' && c.req.path === '/api/bookmarks' ? res.clone() : null;
+  const entry = {
+    method: c.req.method,
+    path: (url.pathname + url.search).slice(0, 500),
+    status: res.status,
+    ip: c.req.header('CF-Connecting-IP') ?? '',
+    user_agent: (c.req.header('User-Agent') ?? '').slice(0, 300),
+    duration_ms: Date.now() - started,
+  };
+  c.executionCtx.waitUntil(
+    (async () => {
+      const body = created ? ((await created.json().catch(() => ({}))) as { bookmark?: { id?: number }; id?: number }) : {};
+      const bookmarkId = pathId ? Number(pathId) : (body.bookmark?.id ?? body.id ?? null);
+      await Promise.all([recordAppLog(c.env.DB, credential, { ...entry, bookmark_id: bookmarkId }), touchAppCredential(c.env.DB, credential)]);
+    })().catch((err) => console.error(JSON.stringify({ message: 'app log failed', app: credential.id, error: String(err) }))),
+  );
+}
 
 // 瀏覽器會自動帶 Basic Auth，寫入 API 需擋跨站請求：同源檢查＋強制 JSON（跨站表單送不出 JSON）
 app.use('/api/*', async (c, next) => {
@@ -408,6 +459,63 @@ app.delete('/api/settings/passkeys/:id', async (c) => {
 app.delete('/api/settings/sessions', async (c) => {
   await destroyOtherSessions(c.env.DB, c.get('sessionId'));
   return c.json({ sessions: await countSessions(c.env.DB) });
+});
+
+// 設定頁：應用程式帳密。建立時才回傳一次原始密碼
+app.get('/api/settings/apps', async (c) => c.json({ apps: await listAppCredentials(c.env.DB) }));
+
+// 跟新增 Passkey 一樣是多一種登入方式，要再輸入目前密碼
+app.post('/api/settings/apps', async (c) => {
+  const body = await readJson(c);
+  const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+  const creds = await loadCredentials(c.env);
+  if (!creds || !(await checkCredentials(creds, creds.username, current))) return c.json({ error: '目前密碼不正確' }, 403);
+  const name = text(body.name, 60);
+  if (!name) throw new BadRequest('請填寫名稱');
+  if ((await countAppCredentials(c.env.DB)) >= MAX_APP_CREDENTIALS) throw new BadRequest(`應用程式帳密最多 ${MAX_APP_CREDENTIALS} 組`);
+  const { credential, password } = await createAppCredential(c.env.DB, name, { ...LOG_DEFAULTS, ...parseRetention(body) });
+  return c.json({ app: credential, password, apps: await listAppCredentials(c.env.DB) }, 201);
+});
+
+app.delete('/api/settings/apps/:id', async (c) => {
+  if (!(await deleteAppCredential(c.env.DB, parseId(c)))) return c.json({ error: '找不到這組應用程式帳密' }, 404);
+  return c.json({ apps: await listAppCredentials(c.env.DB) });
+});
+
+// 呼叫紀錄的保留天數與筆數：預設 7 天、700 筆，上限 30 天、10000 筆
+const RETENTION_FIELDS = { logDays: ['log_days', '保留天數'], logLimit: ['log_limit', '保留筆數'] } as const;
+
+function parseRetention(body: Record<string, unknown>): Partial<LogRetention> {
+  const retention: Partial<LogRetention> = {};
+  for (const [field, [key, label]] of Object.entries(RETENTION_FIELDS)) {
+    if (body[field] === undefined || body[field] === '') continue;
+    const value = Number(body[field]);
+    if (!Number.isInteger(value) || value < 1 || value > LOG_MAX[key]) throw new BadRequest(`${label}必須是 1 到 ${LOG_MAX[key]} 的整數`);
+    retention[key] = value;
+  }
+  return retention;
+}
+
+// 改名稱或保留條件；縮短保留條件時，超出的紀錄立即刪除
+app.patch('/api/settings/apps/:id', async (c) => {
+  const id = parseId(c);
+  const body = await readJson(c);
+  const patch: Partial<Pick<AppCredential, 'name' | 'log_days' | 'log_limit'>> = parseRetention(body);
+  if (body.name !== undefined) {
+    patch.name = text(body.name, 60);
+    if (!patch.name) throw new BadRequest('請填寫名稱');
+  }
+  if (!Object.keys(patch).length) throw new BadRequest('沒有要更新的欄位');
+  const credential = await updateAppCredential(c.env.DB, id, patch);
+  if (!credential) return c.json({ error: '找不到這組應用程式帳密' }, 404);
+  return c.json({ app: credential, apps: await listAppCredentials(c.env.DB) });
+});
+
+app.get('/api/settings/apps/:id/logs', async (c) => {
+  const q = c.req.query();
+  const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
+  const offset = Math.max(Number(q.offset) || 0, 0);
+  return c.json(await listAppLogs(c.env.DB, parseId(c), limit, offset));
 });
 
 app.all('/api/*', (c) => c.json({ error: '找不到這個 API' }, 404));

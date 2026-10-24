@@ -15,12 +15,12 @@ export interface Session {
   renew: boolean;
 }
 
-function toBase64Url(bytes: ArrayBuffer | Uint8Array): string {
+export function toBase64Url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /** D1 只存 token 的雜湊，資料庫外洩也拿不到可用的 Cookie */
-async function hashToken(token: string): Promise<string> {
+export async function hashToken(token: string): Promise<string> {
   return toBase64Url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)));
 }
 

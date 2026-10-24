@@ -209,11 +209,11 @@ footer span { padding: 0 8px; }
   .view-nav a { flex: 1; padding: 0 8px; }
   .tool-card { scroll-margin-top: 120px; }
   .brand span:last-child { display: none; }
-  .hero { padding: 18px 16px 16px; }
+  .hero { padding: 16px 16px 14px; }
   .hero-grid { grid-template-columns: 1fr; gap: 10px; }
   .lede { margin: 0; padding: 2px 0 2px 12px; border-left-width: 4px; font-size: 13px; line-height: 1.6; }
-  .eyebrow { margin-bottom: 8px; font-size: 10px; }
-  h1 { font-size: 36px; }
+  .eyebrow { margin-bottom: 6px; font-size: 10px; }
+  h1 { font-size: 36px; line-height: 1.02; letter-spacing: -.02em; }
   h1 em { -webkit-text-stroke-width: 1.5px; text-shadow: 2px 2px 0 rgba(23, 30, 52, .12); }
   .board { grid-template-columns: 1fr; gap: 22px; padding: 26px 16px 0; }
   .tool-card { padding: 20px; box-shadow: 4px 4px 0 rgba(23, 30, 52, .12); }
@@ -227,7 +227,7 @@ footer span { padding: 0 8px; }
   footer { padding: 20px 16px 32px; }
 }
 @media (max-width: 420px) {
-  h1 { font-size: 32px; }
+  h1 { font-size: 30px; }
   .field-inline { flex-direction: column; }
   .field-inline input { border-right: 1px solid var(--field); }
   .field-inline button { width: 100%; margin-top: 8px; }
@@ -259,3 +259,23 @@ footer span { padding: 0 8px; }
 .switch input:checked { background: var(--green); }
 .switch input:checked::before { transform: translateX(20px); }
 .switch input:disabled { opacity: .55; cursor: progress; }
+
+/* 應用程式帳密（設定頁）：版面沿用 .login-layout 與 .passkey-list */
+.area-apps { grid-column: 1 / -1; }
+.passkey-list li code { font: 12px/1.4 monospace; color: var(--navy); }
+.app-secret { display: flex; flex-direction: column; gap: 8px; padding: 14px; background: white; border: 1px solid var(--line); border-left: 5px solid var(--amber); }
+.app-secret strong { color: var(--red); font-size: 13px; }
+.secret-row { display: grid; grid-template-columns: 3em 1fr auto; align-items: center; gap: 10px; }
+.secret-row span { color: var(--muted); font-size: 12px; font-weight: 800; }
+.secret-row code, .app-secret pre { font: 12px/1.5 monospace; color: var(--navy); overflow-wrap: anywhere; }
+.secret-row button { min-height: 32px; padding: 0 12px; font-size: 12px; }
+.app-secret pre { margin: 0; padding: 10px; background: #f4f2ec; white-space: pre-wrap; }
+.passkey-list li > .app-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; }
+.app-log-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.app-log-list li { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: white; border: 1px solid var(--line); border-left: 5px solid var(--green); }
+.app-log-list li.fail { border-left-color: var(--red); }
+.app-log-list code { font: 12px/1.4 monospace; color: var(--navy); overflow-wrap: anywhere; }
+.app-log-list .log-ua { font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .passkey-list li > .app-actions { grid-column: 1; grid-row: auto; }
+}
