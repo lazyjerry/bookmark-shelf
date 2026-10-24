@@ -54,7 +54,10 @@
         await post('/api/auth/passkey', { response });
         done();
       } catch (err) {
-        show(window.Passkey.message(err), 'error');
+        // 這台裝置找不到本站的 Passkey 時，瀏覽器同樣丟 NotAllowedError，分不出是取消還是沒有
+        show(err.name === 'NotAllowedError'
+          ? '已取消，或這台裝置沒有本站的 Passkey。請先用帳號密碼登入，到「設定」頁的「登入方式」新增'
+          : window.Passkey.message(err), 'error');
       } finally {
         button.disabled = false;
       }

@@ -119,6 +119,10 @@ export async function registerPasskey(db: D1Database, requestUrl: string, respon
 }
 
 export async function authenticationOptions(db: D1Database, requestUrl: string) {
+  // 還沒新增過就不叫出瀏覽器的 Passkey 視窗：iCloud 鑰匙圈、Google 密碼管理工具裡別的網站的 Passkey 在這裡用不了，只會讓人以為壞了
+  if (!(await db.prepare('SELECT 1 FROM passkeys LIMIT 1').first())) {
+    throw new PasskeyError('還沒有新增任何 Passkey。請先用帳號密碼登入，到「設定」頁的「登入方式」新增');
+  }
   const options = await generateAuthenticationOptions({ rpID: relyingParty(requestUrl).rpID, userVerification: 'required' });
   await saveChallenge(db, options.challenge, 'login');
   return options;
