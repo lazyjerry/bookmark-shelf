@@ -24,21 +24,27 @@ function setContent(value: string): HTMLRewriterElementContentHandlers {
   return { element: (el) => void el.setAttribute('content', value) };
 }
 
-/** 依書籤改寫 view.html 的 title 與 og meta，貼到通訊軟體時才有預覽卡；找不到書籤時回 404，頁面自己顯示訊息 */
-export function viewPage(page: Response, bookmark: Bookmark | null): Response {
+/**
+ * 依書籤改寫 view.html 的 title 與 og meta，貼到通訊軟體時才有預覽卡；找不到書籤時回 404，頁面自己顯示訊息。
+ * 標題、描述與 image:alt 都帶上收藏櫃名稱與來源網站，預覽卡看得出是分享的書籤，不會跟原網頁的卡片一模一樣
+ */
+export function viewPage(page: Response, bookmark: Bookmark | null, pageUrl: string): Response {
   const headers = new Headers(page.headers);
   headers.delete('ETag');
   headers.set('Cache-Control', 'private, no-cache');
   if (!bookmark) return new Response(page.body, { status: 404, headers });
 
-  const title = bookmark.title || bookmark.url;
-  const description = bookmark.summary.slice(0, 160);
+  const title = `${bookmark.title || bookmark.url}｜書籤收藏櫃`;
+  const source = bookmark.site || bookmark.host;
+  const description = `收藏自 ${source}${bookmark.category ? `・${bookmark.category}` : ''}｜${bookmark.summary}`.slice(0, 160);
   return new HTMLRewriter()
-    .on('title', { element: (el) => void el.setInnerContent(`${title}｜書籤收藏櫃`) })
+    .on('title', { element: (el) => void el.setInnerContent(title) })
     .on('meta[name="description"]', setContent(description))
     .on('meta[property="og:title"]', setContent(title))
     .on('meta[property="og:description"]', setContent(description))
+    .on('meta[property="og:url"]', setContent(pageUrl))
     .on('meta[property="og:image"]', bookmark.thumbnail ? setContent(bookmark.thumbnail) : { element: (el) => void el.remove() })
+    .on('meta[property="og:image:alt"]', bookmark.thumbnail ? setContent(`${source} 的書籤縮圖`) : { element: (el) => void el.remove() })
     .transform(new Response(page.body, { headers }));
 }
 

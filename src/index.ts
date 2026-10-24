@@ -209,7 +209,8 @@ app.delete('/api/bookmarks/:id', async (c) => {
 // 書籤中轉頁：列表點開書籤先到這裡，未登入也能瀏覽（auth middleware 以 SHARE_PATH 放行）
 app.get('/b/:shareId', async (c) => {
   const page = await c.env.ASSETS.fetch(new URL('/view', c.req.url));
-  return viewPage(page, await findShared(c.env.DB, c.req.param('shareId')));
+  const url = new URL(c.req.url);
+  return viewPage(page, await findShared(c.env.DB, c.req.param('shareId')), url.origin + url.pathname);
 });
 
 // 未登入只回公開欄位；登入時回完整書籤與登入名稱，頁面才顯示編輯與返回
