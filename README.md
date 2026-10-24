@@ -7,6 +7,7 @@
 ## 功能
 
 - **登入**：整站（頁面與 API）都需登入；未設定 `AUTH_PASS` 時一律回應 503，不會預設開放。瀏覽器在登入頁以密碼或 Passkey（Face ID、Touch ID、Windows Hello）登入，Session 保留 30 天、使用中自動延長，PWA 關掉重開也不必重新登入；程式呼叫（捷徑、curl）照舊帶 Basic Auth。登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。
+- **應用程式帳密**：在設定頁替每支程式建立一組帳密，以 Basic Auth 呼叫書籤 API（新增、查詢、更新、刪除）；只能呼叫 `/api/bookmarks` 與 `/api/preview`，用不到時個別刪除即可，不必更換登入密碼。每次呼叫都留下紀錄（時間、方法、路徑、狀態碼、書籤 id、IP、User-Agent），在設定頁查看；保留天數與筆數每組各自設定（預設 7 天、700 筆，上限 30 天、10000 筆）。完整說明見 [API.md](API.md)。
 - **新增書籤**：輸入網址 → 爬蟲抓 `title`、`og:*`、`description`、favicon 與內文摘錄 → AI 產生標題、繁中摘要、分類與標籤 → 確認、補備註後保存（設定頁可開啟「新增書籤時直接保存」，抓取完不經確認直接保存）。AI 失敗或停用時改用爬蟲結果與規則分類。
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
@@ -105,6 +106,8 @@ npm run typecheck
 - Webhook 的簽章密鑰不會回傳到前端。
 - 登入帳密只由 `AUTH_USER`／`AUTH_PASS` 設定，設定頁不能修改。改密碼用 `sh scripts/change-password.sh`（見「更換登入密碼」）；既有 Session 不會因此失效，改完到設定頁按「登出其他裝置」。
 - 登入頁（`/login`、`login.js`、`passkey.js`）與 `/api/auth/*` 不需登入。未登入的頁面導覽轉到登入頁，登入後回到原網址（含 PWA 分享進來的網址）；瀏覽器的 API 請求回 401 但不帶 `WWW-Authenticate`，不會跳出瀏覽器內建的登入框。
+- 應用程式帳密的帳號（`app-` 開頭）與密碼（256 位元亂數）都由伺服器產生，密碼只在建立時顯示一次，D1 只存 SHA-256。建立時需再輸入目前密碼；只能呼叫 `/api/bookmarks`、`/api/bookmarks/:id`、`/api/preview`，其他路徑回 403。更換 `AUTH_PASS` 不會讓它們失效，要在設定頁刪除。
+- 應用程式帳密的呼叫紀錄存在 D1 `app_logs`，含被擋下的 403，不含請求內容；寫入新紀錄時刪掉超過保留天數或筆數的部分，調小保留條件時立即刪除。帳密刪除時紀錄一併刪除。驗證失敗（401）時還不知道是哪組帳密，不記錄。
 - Session Cookie 為 `__Host-` 前綴、`HttpOnly`、`Secure`、`SameSite=Lax`，帶 `Max-Age`（iOS 主畫面 App 被系統關掉後，沒有效期的 Cookie 會消失）。D1 只存 token 的 SHA-256。
 - Passkey 要求使用者驗證（生物辨識或裝置 PIN，伺服器分不出是哪一種），新增時需再輸入目前密碼；challenge 5 分鐘內有效、只能用一次。密碼一直都能登入；遺失裝置時在設定頁刪除該 Passkey，或：
 
@@ -117,7 +120,9 @@ npm run typecheck
 
 ## API
 
-除了 `/api/auth/*` 與 `/api/share/*` 之外都需登入：程式呼叫帶 Basic Auth，瀏覽器用登入頁換到的 Session Cookie。寫入請求需帶 `Content-Type: application/json`。
+用程式存取書籤（應用程式帳密、header 帶帳密、書籤 CRUD、呼叫紀錄與保留設定、curl／JavaScript／Python 範例）的完整說明見 [API.md](API.md)。以下為所有端點的總表。
+
+除了 `/api/auth/*` 與 `/api/share/*` 之外都需登入：程式呼叫帶 Basic Auth（`AUTH_USER`／`AUTH_PASS`，或設定頁建立的應用程式帳密），瀏覽器用登入頁換到的 Session Cookie。應用程式帳密只能呼叫 `/api/preview` 與 `/api/bookmarks*`。寫入請求需帶 `Content-Type: application/json`。
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
@@ -143,12 +148,26 @@ npm run typecheck
 | `POST` | `/api/settings/passkeys/options`、`/api/settings/passkeys` | 新增 Passkey：`{ "currentPassword" }` 取得選項，再送 `{ "name", "response" }` |
 | `DELETE` | `/api/settings/passkeys/:id` | 刪除 Passkey |
 | `DELETE` | `/api/settings/sessions` | 登出目前這個以外的所有 Session |
+| `GET` `POST` | `/api/settings/apps` | 列出、建立應用程式帳密：`{ "name", "currentPassword", "logDays", "logLimit" }`（保留天數 1–30、預設 7；保留筆數 1–10000、預設 700），回傳 `app`（含 `username`）與只出現這一次的 `password` |
+| `PATCH` `DELETE` | `/api/settings/apps/:id` | 更新 `{ "name", "logDays", "logLimit" }`（只更新有傳的欄位）、刪除應用程式帳密（連同呼叫紀錄） |
+| `GET` | `/api/settings/apps/:id/logs` | 呼叫紀錄，新的在前；參數 `limit`（預設 50，最多 200）、`offset`，回傳 `logs` 與 `total` |
 
 例如用捷徑或腳本直接收藏：
 
 ```bash
 curl -u admin:<密碼> -H 'Content-Type: application/json' \
   -d '{"url":"https://github.com/honojs/hono"}' https://<你的網域>/api/bookmarks
+```
+
+用應用程式帳密（設定頁 → 應用程式帳密建立）做 CRUD。`-u` 會產生 `Authorization: Basic <base64(帳號:密碼)>` header，其他工具自行組出這個 header 即可：
+
+```bash
+AUTH='app-xxxxxxxxxxxx:<建立時顯示的密碼>'
+curl -u "$AUTH" 'https://<你的網域>/api/bookmarks?q=hono&limit=10'          # 查詢
+curl -u "$AUTH" https://<你的網域>/api/bookmarks/12                          # 讀取
+curl -u "$AUTH" -X PATCH -H 'Content-Type: application/json' \
+  -d '{"note":"稍後再讀","tags":["hono"]}' https://<你的網域>/api/bookmarks/12  # 更新
+curl -u "$AUTH" -X DELETE https://<你的網域>/api/bookmarks/12                # 刪除
 ```
 
 ## Webhook
@@ -234,11 +253,14 @@ python3 scripts/generate-icons.py
 ## 專案結構
 
 ```
+├── API.md                      程式化存取說明（應用程式帳密、書籤 CRUD、呼叫紀錄）
 ├── migrations/0001_init.sql    D1 資料表
 ├── migrations/0002_settings.sql 個人設定
 ├── migrations/0003_sessions_passkeys.sql 登入 Session、Passkey、WebAuthn challenge
 ├── migrations/0004_share_id.sql 中轉頁網址用的 share_id
 ├── migrations/0005_drop_auth_settings.sql 清掉舊版設定頁存的登入帳密
+├── migrations/0006_app_credentials.sql 應用程式帳密
+├── migrations/0007_app_logs.sql 應用程式帳密的呼叫紀錄與保留設定
 ├── public/                     前端頁面、PWA manifest、Service Worker、圖示
 ├── scripts/generate-icons.py   產生 PWA 圖示
 ├── scripts/change-password.sh  互動更換登入密碼（wrangler secret put AUTH_PASS）
@@ -254,6 +276,7 @@ python3 scripts/generate-icons.py
 │   ├── settings.ts             個人設定、登入帳密驗證
 │   ├── session.ts              瀏覽器登入的 Session Cookie
 │   ├── passkeys.ts             Passkey（WebAuthn）註冊與驗證
+│   ├── apps.ts                 應用程式帳密的建立、驗證、刪除與呼叫紀錄
 │   ├── share.ts                書籤中轉頁的公開欄位、og meta 與縮圖轉送
 │   └── extractors/             網域擴充器
 └── wrangler.jsonc
