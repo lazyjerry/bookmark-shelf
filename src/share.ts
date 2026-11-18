@@ -6,6 +6,8 @@ const SHARE_ID = /^[0-9a-f]{24}$/;
 // 只轉 raster 圖：SVG 可以帶 script，從本站網域送出等於開了 XSS
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// GA4 測量 ID。會寫進中轉頁的 HTML，存入與輸出前都要通過這個格式
+export const GA_ID = /^G-[A-Z0-9]{4,20}$/;
 
 export async function findShared(db: D1Database, shareId: string): Promise<Bookmark | null> {
   return SHARE_ID.test(shareId) ? getBookmarkByShareId(db, shareId) : null;
@@ -26,9 +28,10 @@ function setContent(value: string): HTMLRewriterElementContentHandlers {
 
 /**
  * 依書籤改寫 view.html 的 title 與 og meta，貼到通訊軟體時才有預覽卡；找不到書籤時回 404，頁面自己顯示訊息。
- * 標題、描述與 image:alt 都帶上收藏櫃名稱與來源網站，預覽卡看得出是分享的書籤，不會跟原網頁的卡片一模一樣
+ * 標題、描述與 image:alt 都帶上收藏櫃名稱與來源網站，預覽卡看得出是分享的書籤，不會跟原網頁的卡片一模一樣。
+ * 有設定 GA4 測量 ID 才留下 ga-measurement-id meta，由 view.js 判斷不是擁有者後再載入 gtag
  */
-export function viewPage(page: Response, bookmark: Bookmark | null, pageUrl: string): Response {
+export function viewPage(page: Response, bookmark: Bookmark | null, pageUrl: string, measurementId: string): Response {
   const headers = new Headers(page.headers);
   headers.delete('ETag');
   headers.set('Cache-Control', 'private, no-cache');
@@ -45,6 +48,7 @@ export function viewPage(page: Response, bookmark: Bookmark | null, pageUrl: str
     .on('meta[property="og:url"]', setContent(pageUrl))
     .on('meta[property="og:image"]', bookmark.thumbnail ? setContent(bookmark.thumbnail) : { element: (el) => void el.remove() })
     .on('meta[property="og:image:alt"]', bookmark.thumbnail ? setContent(`${source} 的書籤縮圖`) : { element: (el) => void el.remove() })
+    .on('meta[name="ga-measurement-id"]', GA_ID.test(measurementId) ? setContent(measurementId) : { element: (el) => void el.remove() })
     .transform(new Response(page.body, { headers }));
 }
 

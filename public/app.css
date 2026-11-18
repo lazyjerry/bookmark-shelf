@@ -191,6 +191,9 @@ output ul { margin: 6px 0 0; padding-left: 18px; font-weight: 500; color: #555a6
   .mail-layout { grid-template-columns: 1fr; }
 }
 
+/* 流量分析：版面沿用通知信的 .mail-layout／.mail-steps */
+.area-analytics { grid-column: 1 / -1; }
+
 /* 編輯對話框 */
 dialog { width: min(640px, calc(100% - 28px)); padding: 0; color: var(--navy); background: var(--card); border: 1px solid var(--line); border-top: 7px solid var(--blue); box-shadow: 7px 7px 0 rgba(23, 30, 52, .2); --accent: var(--blue); }
 dialog::backdrop { background: rgba(23, 30, 52, .45); }

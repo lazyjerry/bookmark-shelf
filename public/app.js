@@ -662,6 +662,31 @@
     }
   });
 
+  // 流量分析（設定頁）：GA4 測量 ID，只用在書籤中轉頁
+  async function loadAnalytics() {
+    try {
+      const { measurementId } = await api('/api/settings/analytics');
+      $('analytics-id').value = measurementId;
+    } catch (err) {
+      setStatus($('analytics-status'), `無法載入流量分析設定：${err.message}`, 'error');
+    }
+  }
+
+  $('analytics-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.submitter || $('analytics-form').querySelector('button');
+    busy(button, true, '儲存中…');
+    try {
+      const { measurementId } = await api('/api/settings/analytics', { method: 'PUT', body: { measurementId: $('analytics-id').value } });
+      $('analytics-id').value = measurementId;
+      setStatus($('analytics-status'), measurementId ? '已儲存，分享頁會統計訪客瀏覽' : '已儲存，目前不統計', 'ok');
+    } catch (err) {
+      setStatus($('analytics-status'), err.message, 'error');
+    } finally {
+      busy(button, false);
+    }
+  });
+
   // 登入方式（設定頁）：Passkey 與登入中的裝置
   function passkeyItem(passkey) {
     const used = passkey.last_used_at ? `最近使用 ${timeAgo(passkey.last_used_at)}` : '尚未用來登入';
@@ -974,6 +999,7 @@
   // Webhook 介面暫時隱藏，恢復時加回 loadHooks()
   const settingsLoaded = loadSettings();
   loadMail();
+  loadAnalytics();
   loadLogin();
   loadApps();
   // 分享進來的網址要等設定載入，才知道要不要直接保存

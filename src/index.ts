@@ -22,7 +22,7 @@ import {
   authenticatePasskey, authenticationOptions, deletePasskey, listPasskeys, PasskeyError, registerPasskey, registrationOptions,
 } from './passkeys';
 import { countSessions, createSession, destroyOtherSessions, destroySession, readSession, renewSession } from './session';
-import { findShared, publicBookmark, thumbnailResponse, viewPage } from './share';
+import { findShared, GA_ID, publicBookmark, thumbnailResponse, viewPage } from './share';
 
 /** sessionId：以 Session Cookie 登入時才有，Basic Auth 呼叫沒有。appCredential：以應用程式帳密呼叫時才有 */
 type AppEnv = { Bindings: Env; Variables: { sessionId?: string; appCredential?: AppCredential } };
@@ -259,9 +259,13 @@ app.delete('/api/bookmarks/:id', async (c) => {
 
 // 書籤中轉頁：列表點開書籤先到這裡，未登入也能瀏覽（auth middleware 以 SHARE_PATH 放行）
 app.get('/b/:shareId', async (c) => {
-  const page = await c.env.ASSETS.fetch(new URL('/view', c.req.url));
+  const [page, bookmark, settings] = await Promise.all([
+    c.env.ASSETS.fetch(new URL('/view', c.req.url)),
+    findShared(c.env.DB, c.req.param('shareId')),
+    getSettings(c.env.DB, ['ga_measurement_id']),
+  ]);
   const url = new URL(c.req.url);
-  return viewPage(page, await findShared(c.env.DB, c.req.param('shareId')), url.origin + url.pathname);
+  return viewPage(page, bookmark, url.origin + url.pathname, settings.ga_measurement_id ?? '');
 });
 
 // 未登入只回公開欄位；登入時回完整書籤與登入名稱，頁面才顯示編輯與返回
@@ -397,6 +401,20 @@ app.post('/api/settings/mail/test', async (c) => {
   if (!mail.from || !mail.to.length) throw new BadRequest('請先儲存寄件地址與收件地址');
   const results = await sendBookmarkMail(c.env, await latestOrSample(c.env.DB), new URL(c.req.url).origin, true);
   return c.json({ results });
+});
+
+// 分享頁流量統計：GA4 測量 ID，清空即停用。會寫進中轉頁 HTML，格式不符一律拒絕
+app.get('/api/settings/analytics', async (c) => {
+  const settings = await getSettings(c.env.DB, ['ga_measurement_id']);
+  return c.json({ measurementId: settings.ga_measurement_id ?? '' });
+});
+
+app.put('/api/settings/analytics', async (c) => {
+  const body = await readJson(c);
+  const measurementId = text(body.measurementId, 30).toUpperCase();
+  if (measurementId && !GA_ID.test(measurementId)) throw new BadRequest('測量 ID 格式不正確，應為 G- 開頭，例如 G-ABC123DEF4');
+  await putSettings(c.env.DB, { ga_measurement_id: measurementId });
+  return c.json({ measurementId });
 });
 
 function passkeyResponse<T>(body: Record<string, unknown>): T {

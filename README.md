@@ -14,13 +14,14 @@
 - **分頁**：頂列選單切換三個分頁。
   - **新增與列表**：以新增書籤為主，附最近新建、最近點擊與全部書籤。
   - **搜尋與列表**：以搜尋為主，附網站分類（GitHub、Threads、Instagram……）、內容分類、標籤分類（依數量排序）與全部書籤。
-  - **設定**：個人資料（姓名、新增書籤時直接保存）、登入方式（Passkey、登出其他裝置）與通知信。
+  - **設定**：個人資料（姓名、新增書籤時直接保存）、登入方式（Passkey、登出其他裝置）、通知信與流量分析。
 - **欄位**：網址、標題、摘要、分類、標籤、備註、縮圖（`og:image`）、favicon，另記點擊次數與時間。
 - **網域擴充器**：針對特定網域改寫抓取與摘要規則，內建 GitHub（API、README、topics，可讀 Private Repo）與 YouTube（oEmbed）。
 - **Webhook**：新增、更新、刪除、點擊書籤時呼叫指定網址，支援 POST JSON、POST 表單與 GET，可選 HMAC 簽章。設定介面目前隱藏，API 仍可使用。
 - **PWA**：可安裝到桌面或手機主畫面；Android 可從其他 App「分享」網址直接新增。
 - **通知信**：新增書籤時，寄網站資料（標題、網址、網站、分類、標籤、縮圖）與摘要給設定頁指定的收件人。走 Cloudflare Email Routing，只寄得到已驗證的收件地址。
 - **書籤中轉頁**：列表點開書籤時另開分頁到 `/b/<share_id>`，顯示該網站的資料，再按「前往網站」開原網址。這個網址不需登入即可瀏覽，可直接分享；登入時多了登入名稱、返回、編輯與刪除。「分享」可複製網址，或產生一張書籤分享圖（有縮圖、沒縮圖各有版面）儲存或分享。
+- **分享頁流量統計**：設定頁填 GA4 測量 ID 後，書籤中轉頁會統計訪客瀏覽與「前往網站」的外連點擊；登入時自己的瀏覽不算。
 
 ## 畫面
 
@@ -101,6 +102,14 @@ npx wrangler deploy --domain <你的網域>
 
 收件地址清空即停止寄送。寄送在背景執行，失敗只記在 Worker log（`message: "mail"`），不影響新增書籤。本機 `npm run dev` 不會真的寄出，信件內容存到 `.wrangler/tmp/email/`。
 
+### 分享頁流量統計（GA4）
+
+1. 在 Google Analytics 建立資源，管理 → 資料串流 → 新增「網頁」串流，網址填這個 Worker 的網域。
+2. 複製串流的「評估 ID」（`G-` 開頭），貼到設定頁「流量分析」儲存。建立串流時跳出的「設定 Google 代碼」畫面（`GTM-` 開頭的程式碼）不用貼，關掉即可；程式只收 `G-` 開頭的 ID。
+3. 用無痕視窗開一個分享網址，GA4「即時」報表會出現瀏覽。
+
+只有書籤中轉頁 `/b/<share_id>` 會載入 gtag，而且要確認訪客不是登入中的擁有者才載入，所以沒分享出去的書籤不會出現在 GA。GA 收到的是完整分享網址（含 share_id），能看 GA 報表的人都能從報表打開這些中轉頁；Google 代碼會自動送 page_view，網頁端的 `page_location` 改寫不會生效。「前往網站」的點擊靠串流的加強型評估「外連點擊」記錄（預設開啟）。測量 ID 清空即停用。
+
 ## 本機開發
 
 ```bash
@@ -157,6 +166,7 @@ npm run typecheck
 | `GET` `PATCH` | `/api/settings` | 讀取設定、更新 `{ "name", "autoSave" }`（只更新有傳的欄位；`autoSave` 為新增書籤時直接保存） |
 | `GET` `PUT` | `/api/settings/mail` | 讀取、更新通知信 `{ "from", "to" }`（`to` 為陣列，或以換行、逗號分隔的字串，最多 10 個） |
 | `POST` | `/api/settings/mail/test` | 以最新一筆書籤寄測試信，回傳每個收件地址的結果 |
+| `GET` `PUT` | `/api/settings/analytics` | 讀取、更新分享頁的 GA4 測量 ID `{ "measurementId" }`（`G-` 開頭；空字串停用） |
 | `POST` | `/api/auth/login` | `{ "username", "password" }` 登入，發 Session Cookie（免登入） |
 | `POST` | `/api/auth/passkey/options`、`/api/auth/passkey` | Passkey 登入：取得 challenge、送出驗證結果（免登入） |
 | `POST` | `/api/auth/logout` | 登出目前的 Session（免登入） |

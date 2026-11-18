@@ -275,6 +275,31 @@
       </div>
     </section>
 
+    <section class="tool-card accent-navy area-analytics" data-views="settings" aria-labelledby="analytics-title" hidden>
+      <div class="card-heading">
+        <span class="index" aria-hidden="true"></span>
+        <div><h2 id="analytics-title">流量分析</h2><p>以 Google Analytics 4 統計分享出去的書籤中轉頁</p></div>
+      </div>
+      <div class="mail-layout">
+        <form id="analytics-form" class="panel">
+          <label for="analytics-id">GA4 測量 ID</label>
+          <input id="analytics-id" maxlength="30" autocomplete="off" spellcheck="false" placeholder="G-XXXXXXXXXX">
+          <p class="hint">清空即停用，中轉頁不再載入 Google Analytics。只有中轉頁會統計，列表與設定頁不會。</p>
+          <button type="submit">儲存</button>
+          <output id="analytics-status" aria-live="polite"></output>
+        </form>
+        <div class="panel mail-steps">
+          <strong>測量 ID 在哪裡找</strong>
+          <ol>
+            <li>到 <b>Google Analytics</b> → 管理 → 資料串流，新增或點開「網頁」串流，網址填這個網站。</li>
+            <li>串流詳細資料右上角的「評估 ID」就是測量 ID，格式為 <code>G-</code> 開頭。</li>
+            <li>貼到左邊儲存，再用無痕視窗開一個分享網址，GA4 的「即時」報表就會出現。</li>
+          </ol>
+          <p class="hint">會送出：書籤標題、完整的分享網址、訪客的來源網站，以及「前往網站」的外連點擊（GA4 加強型評估預設開啟）。不會送出：備註、點擊數，以及你登入時的瀏覽，所以沒分享出去的書籤不會出現在 GA。</p>
+        </div>
+      </div>
+    </section>
+
     <!-- Webhook 介面暫時隱藏：沒有 data-views，showView() 不會打開它。恢復時加回 data-views="settings"，並在 app.js 呼叫 loadHooks() -->
     <section class="tool-card accent-amber area-hooks" aria-labelledby="hooks-title" hidden>
       <div class="card-heading">

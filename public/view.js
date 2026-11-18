@@ -130,9 +130,23 @@
       }
       $('share').hidden = false;
       render();
+      if (!data.owner) startAnalytics();
     } catch (err) {
       showGone(err.message);
     }
+  }
+
+  // GA4：只統計訪客，擁有者自己的瀏覽不算，沒分享出去的書籤因此不會進 GA。
+  // 送出的是完整網址（含 share_id）：Google 代碼會自動送 page_view，無視 config 的 page_location 與 send_page_view，改寫不了。
+  // 「前往網站」的點擊由 GA4 加強型評估的外連點擊記錄，不另送事件，避免重複計算
+  function startAnalytics() {
+    const id = document.querySelector('meta[name="ga-measurement-id"]')?.content;
+    if (!id) return;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function gtag() { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', id);
+    document.head.append(h('script', { async: true, src: `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}` }));
   }
 
   // 返回：從列表另開的分頁沒有上一頁，改關掉分頁回到列表；關不掉（例如直接開網址）就回首頁
