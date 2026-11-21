@@ -52,7 +52,7 @@ export default new OAuthProvider({
 1. client 動態註冊後，把你導到 `<閘道網域>/authorize`。
 2. `authHandler` 用 `env.OAUTH_PROVIDER.parseAuthRequest(request)` 解析授權請求。
 3. 還沒登入就先顯示登入頁（密碼或 Passkey）。
-4. 顯示同意頁：client 名稱，以及可勾選的服務與權限（例如 `bookmarks:read`、`bookmarks:write`，各範圍的意思見 [06](06-安全與權限.md)）。
+4. 顯示同意頁：client 名稱，以及可勾選的服務與權限（例如 `bookmarks:read`、`bookmarks:write`，各範圍的意思見 [06](06-安全與權限.md)）。有哪些服務、哪些範圍、預設勾不勾，來自各服務 `describe()` 的回傳（見 [02](02-服務綁定與RPC.md)〈服務自述〉），閘道自己不寫。
 5. 你按同意後呼叫 `env.OAUTH_PROVIDER.completeAuthorization({ request, userId, scope, props, metadata })`，把勾選結果放進 `props`。
 6. client 換到 access token，之後每次呼叫 `/mcp`，`apiHandler` 都能從 `ctx.props` 讀到當初授權的範圍。
 
@@ -63,7 +63,7 @@ export default new OAuthProvider({
 - **`McpAgent`**：每個連線一個 Durable Object，可以保存連線狀態。需要另外宣告 Durable Object binding。
 - **無狀態 handler**：每個請求獨立處理，不需要 Durable Objects。
 
-閘道的 tools 都是「呼叫服務、回傳結果」，沒有要跨請求保存的狀態，優先選無狀態。
+閘道的 tools 都是「呼叫服務的 `call()`、回傳結果」，沒有要跨請求保存的狀態，優先選無狀態。
 
 tool 清單依 `ctx.props` 的範圍過濾：只有 `bookmarks:read` 的 token，在 `tools/list` 裡就看不到新增、刪除這類 tool。
 

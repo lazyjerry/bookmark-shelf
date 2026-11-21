@@ -1,6 +1,6 @@
 # 02 服務綁定與 RPC
 
-> 狀態：已實作。與下面範例的差異：RPC 另有 `overview`、`preview`、`update`、`remove`；共用流程是 `createBookmark(env, ctx, body, appUrl)`，`caller` 由 `BookmarkRpc` 寫進 Workers Logs，不進 D1；`preview` 回 `{ ok, draft, duplicateId }`；`get`、`search`、`overview` 不回 `share_id`；`preview`、`add`、`update`、`remove` 超過速率限制時回 `{ ok: false, reason: 'rate_limited', message, retryAfter }`；`add`、`update` 只取契約內的欄位，多帶的不採用；閘道只用 `search`、`get`、`overview`、`add`，`preview`、`update`、`remove` 還留在 RPC 上，等閘道部署後再移除，原因見 [06-安全與權限.md](06-安全與權限.md)〈提示注入〉。
+> 狀態：已實作。與下面範例的差異：RPC 另有 `overview`、`preview`、`update`、`remove`；共用流程是 `createBookmark(env, ctx, body, appUrl)`，`caller` 由 `BookmarkRpc` 寫進 Workers Logs，不進 D1；`preview` 回 `{ ok, draft, duplicateId }`；`get`、`search`、`overview` 不回 `share_id`；`preview`、`add`、`update`、`remove` 超過速率限制時回 `{ ok: false, reason: 'rate_limited', message, retryAfter }`；`add`、`update` 只取契約內的欄位，多帶的不採用；閘道的契約改成 `describe()`、`call()` 兩個方法（見〈服務自述〉），書籤服務已實作；`search`、`get`、`overview`、`add`、`preview`、`update`、`remove` 還留在 RPC 上，等閘道改用 `call()` 並部署後再移除。只開放查詢與新增的原因見 [06-安全與權限.md](06-安全與權限.md)〈提示注入〉。
 
 ## 概念
 
@@ -61,25 +61,50 @@ REST 的 `POST /api/bookmarks` handler 裡有「正規化網址 → 查重 → `
 - `service` 是書籤 Worker 的 `name`（本專案 `wrangler.jsonc` 裡的 `bookmark-shelf`）。
 - `entrypoint` 是匯出的 class 名稱；省略時綁的是 `export default`（也就是 HTTP 的 fetch）。
 
-呼叫：
+閘道 repo 不放任何服務的資訊：接上哪些服務寫在 secret `SERVICES`（逗號分隔的 binding 名稱，例如 `BOOKMARKS`），binding 的宣告怎麼留在版控外，見 [05](05-本機開發與部署.md)。
+
+## 服務自述：`describe()` 與 `call()`
+
+閘道不寫死每個服務的 tool、授權範圍與 RPC 方法，改由服務自己描述。每個服務的 entrypoint 都實作同樣的兩個方法，閘道對 `SERVICES` 列出的每個 binding 一視同仁：
 
 ```ts
-const result = await env.BOOKMARKS.search({ q: 'hono', limit: 10 });
-```
-
-### 型別
-
-閘道與書籤服務是不同專案，閘道拿不到書籤服務的 `Env`。在閘道裡宣告一份介面描述 RPC 的形狀即可：
-
-```ts
-interface BookmarkService {
-  search(params: { q?: string; tag?: string; limit?: number; offset?: number }): Promise<{ items: Bookmark[]; hasMore: boolean }>;
-  get(id: number): Promise<Bookmark | null>;
-  add(input: { url: string; note?: string }, caller: { client: string }): Promise<AddResult>;
+// 閘道裡唯一的服務介面，所有服務共用
+interface Service {
+  describe(): Promise<{
+    label: string;            // 同意頁顯示的服務名稱
+    scopes: { scope: string; label: string; description: string; defaultChecked: boolean }[];
+    tools: {
+      name: string;
+      title: string;
+      description: string;
+      inputSchema: object;    // JSON Schema，最外層 type: 'object'
+      annotations: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean };
+      scopes: string[];       // 列出與呼叫都需要的範圍
+    }[];
+  }>;
+  call(tool: string, args: unknown, caller: { client: string }): Promise<{ ok: true; data: unknown } | { ok: false; message: string }>;
 }
 ```
 
-RPC 方法改了簽名時，這份介面要跟著改；把它當成兩個服務之間的契約，放在閘道專案裡固定的一個檔案。
+- **`describe()`** 回傳純物件。閘道用 `scopes` 產生同意頁的勾選項目，用 `tools` 回應 `tools/list`，`inputSchema` 原樣交給 AI client。
+- **`call()`** 執行一個 tool。可預期的結果（找不到、重複、參數不合法、超過速率限制、不認得的 tool 名稱）回 `{ ok: false, message }`，`message` 會原樣顯示給 AI client，不放堆疊與內部路徑；只有真正的例外才 throw。
+- **閘道強制前綴**：閘道以 binding 名稱小寫當服務名稱（`BOOKMARKS` → `bookmarks`），tool 名稱不是 `bookmarks_` 開頭、範圍不是 `bookmarks:` 開頭的一律丟掉。一個服務無法宣告或冒用別的服務的 tool 與範圍。
+- **服務自己驗參數**：閘道只拿 `inputSchema` 做 JSON Schema 驗證，服務不能假設參數已經驗過。JSON Schema 也表達不了所有規則，例如「去掉空白後不為空」。
+
+書籤服務的定義在 `src/tools.ts`：每個 tool 一份 zod schema，`describe()` 用 `z.toJSONSchema()` 轉成 `inputSchema`，`call()` 用同一份 schema 驗證參數，兩邊不會對不上。`bookmarks_add` 的 `title`、`summary` 用 `.trim().min(1)` 擋掉全空白的值：共用流程 `createBookmark` 收到空的標題會自己去抓網頁，MCP 這條路不讓伺服器連外。
+
+```ts
+// src/rpc.ts
+async describe() {
+  return describeService();
+}
+
+async call(tool: string, args: unknown, caller: Caller) {
+  return callTool(this, tool, args, caller);
+}
+```
+
+這樣切之後，新增或調整 tool 只要改服務並部署，閘道不必動；兩邊之間的契約只剩上面這份介面。
 
 ## 參數、回傳與錯誤
 
