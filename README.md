@@ -312,6 +312,7 @@ python3 scripts/generate-icons.py
 ├── API.md                      程式化存取說明（應用程式帳密、書籤 CRUD、呼叫紀錄）
 ├── SHORTCUTS.md                Apple 捷徑的加入方式與自行建置
 ├── docs/screenshots/           README 的畫面截圖（網站與 VS Code 延伸模組）
+├── docs/教學/                  技術教學（MCP 閘道、服務綁定 RPC 等），規範見 docs/教學/索引.md
 ├── migrations/0001_init.sql    D1 資料表
 ├── migrations/0002_settings.sql 個人設定
 ├── migrations/0003_sessions_passkeys.sql 登入 Session、Passkey、WebAuthn challenge
