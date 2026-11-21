@@ -39,6 +39,17 @@ describe('search', () => {
   });
 });
 
+describe('search 的 sort', () => {
+  it('不在清單裡的值（含 constructor 這類原型上的鍵）照預設排序，不出錯', async () => {
+    await restAdd({ url: 'https://site.test/sort-a', title: '排序 A' });
+    await restAdd({ url: 'https://site.test/sort-b', title: '排序 B' });
+    const expected = (await rpc().search({ q: '排序' })).items.map((b: Json) => b.id);
+    for (const sort of ['constructor', 'toString', '__proto__', 'nope']) {
+      expect((await rpc().search({ q: '排序', sort })).items.map((b: Json) => b.id), sort).toEqual(expected);
+    }
+  });
+});
+
 describe('get', () => {
   it('找得到回書籤，找不到回 null', async () => {
     const created = await restAdd({ url: 'https://site.test/get', title: '取得' });
@@ -67,6 +78,15 @@ describe('preview', () => {
     expect(fresh.duplicateId).toBeNull();
     const created = await restAdd({ url: 'https://site.test/preview', title: '已收藏' });
     expect((await rpc().preview('https://site.test/preview')).duplicateId).toBe(created.id);
+  });
+});
+
+describe('preview 連不上網站', () => {
+  it('警告只有固定文字，不帶連線錯誤的細節', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const result = await rpc().preview('https://unreachable.test/x');
+    expect(JSON.stringify(result)).toContain('無法連線到這個網站');
+    expect(JSON.stringify(result)).not.toContain('測試不允許連外');
   });
 });
 
@@ -100,6 +120,23 @@ describe('add', () => {
       expect(send).toHaveBeenCalledTimes(1);
     });
     expect((send.mock.calls[0][0] as Json).to).toBe('owner@bookmarks.test');
+  });
+});
+
+describe('契約外的欄位', () => {
+  it('add 不收 extra、thumbnail、favicon', async () => {
+    const result = await rpc().add({ url: 'https://site.test/rpc-extra', title: '多餘欄位', extra: { big: 'x' }, thumbnail: 'https://evil.test/t.png', favicon: 'https://evil.test/f.ico' }, caller);
+    expect(result.ok).toBe(true);
+    expect(result.bookmark.extra).toEqual({});
+    expect(result.bookmark.thumbnail).toBe('');
+    expect(result.bookmark.favicon).toBe('');
+  });
+
+  it('update 不收 thumbnail', async () => {
+    const created = await restAdd({ url: 'https://site.test/rpc-thumb', title: '縮圖' });
+    const result = await rpc().update(created.id, { note: '有改', thumbnail: 'https://evil.test/t.png' }, caller);
+    expect(result.bookmark.note).toBe('有改');
+    expect(result.bookmark.thumbnail).toBe('');
   });
 });
 

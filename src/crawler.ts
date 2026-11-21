@@ -96,7 +96,9 @@ export async function fetchPageMeta(url: string): Promise<PageMeta> {
       },
     });
   } catch (err) {
-    throw new CrawlError(`無法連線：${err instanceof Error ? err.message : String(err)}`);
+    // 連線錯誤的細節只進 log：回給呼叫端會變成探測主機的管道
+    console.error(JSON.stringify({ message: 'crawl failed', host: new URL(url).host, error: String(err) }));
+    throw new CrawlError('無法連線到這個網站');
   }
 
   const finalUrl = res.url || url;

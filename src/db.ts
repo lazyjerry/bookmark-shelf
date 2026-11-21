@@ -175,7 +175,8 @@ export async function listBookmarks(db: D1Database, query: ListQuery): Promise<{
   if (query.tag) where.push(`EXISTS (SELECT 1 FROM bookmark_tags t WHERE t.bookmark_id = b.id AND t.tag = ${param(query.tag)})`);
   if (query.sort === 'clicked') where.push('b.last_clicked_at IS NOT NULL');
 
-  const order = SORTS[query.sort ?? ''] ?? SORTS.created;
+  // 只認自己的鍵：constructor 這類原型上的鍵會取到函式，組出壞掉的 SQL
+  const order = Object.hasOwn(SORTS, query.sort ?? '') ? SORTS[query.sort!] : SORTS.created;
   // 多取一筆判斷是否還有下一頁
   const sql = `${SELECT_BOOKMARK} ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY ${order} LIMIT ${param(query.limit + 1)} OFFSET ${param(query.offset)}`;
