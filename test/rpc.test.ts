@@ -1,7 +1,7 @@
 // BookmarkRpc：透過 ctx.exports 的 loopback binding 呼叫主 Worker 匯出的 entrypoint（等同閘道的服務綁定）
 import { env, exports } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, hookCalls, mockOutbound } from './helpers/http';
+import { api, hookCalls, mockOutbound, PAGE_HTML } from './helpers/http';
 
 type Json = Record<string, any>;
 
@@ -166,5 +166,34 @@ describe('id 不是正整數', () => {
       expect(await rpc().remove(id, { client: 't' })).toEqual({ ok: false, reason: 'invalid', message: 'id 不正確' });
     }
     expect((await rpc().get(created.id)).title).toBe('原標題');
+  });
+});
+
+// 自動抓取要等外部網頁，這段時間別的請求可能先存進同一個網址：查重已經過了，寫入時才撞上 url 的 UNIQUE。
+// 測試執行環境不會真的並行，改在「抓網頁」的當下由 mock 插入同一個網址來重現
+describe('抓取網頁期間，同一個網址被別的請求先收藏', () => {
+  function saveDuringCrawl(url: string) {
+    let first: Promise<Json> | null = null;
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const target = input instanceof Request ? input.url : String(input);
+      if (target === url) first ??= restAdd({ url, title: '先存進來的' });
+      await first;
+      if (new URL(target).hostname === 'hooks.test') return new Response('ok');
+      return new Response(PAGE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    });
+    return () => first!;
+  }
+
+  it('RPC add 回 duplicate 並帶既有 id', async () => {
+    const existing = saveDuringCrawl('https://site.test/race-rpc');
+    const result = await rpc().add({ url: 'https://site.test/race-rpc' }, { client: 't' });
+    expect(result).toEqual({ ok: false, reason: 'duplicate', id: (await existing()).id });
+  });
+
+  it('REST 回 409 並帶既有 id', async () => {
+    const existing = saveDuringCrawl('https://site.test/race-rest');
+    const res = await api('/api/bookmarks', { method: 'POST', body: { url: 'https://site.test/race-rest' } });
+    expect([res.status, ((await res.json()) as Json).id]).toEqual([409, (await existing()).id]);
   });
 });

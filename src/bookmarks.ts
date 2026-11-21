@@ -56,7 +56,7 @@ export async function createBookmark(env: Env, bg: Background, body: Record<stri
   const target = new URL(url);
   const draft = typeof body.title === 'string' && body.title.trim() ? null : await buildDraft(env, url);
   const extra = body.extra && typeof body.extra === 'object' && !Array.isArray(body.extra) ? (body.extra as Record<string, unknown>) : {};
-  const bookmark = await insertBookmark(env.DB, {
+  const bookmark = await insertOrExisting(env.DB, {
     url,
     title: draft?.title ?? text(body.title, 300),
     summary: draft?.summary ?? text(body.summary, 2000),
@@ -69,9 +69,21 @@ export async function createBookmark(env: Env, bg: Background, body: Record<stri
     host: hostOf(target),
     extra: draft?.extra ?? extra,
   });
+  if (typeof bookmark === 'number') return { ok: false, reason: 'duplicate', id: bookmark };
   emit(env, bg, 'bookmark.created', bookmark);
   notifyCreated(env, bg, bookmark, appUrl);
   return { ok: true, bookmark };
+}
+
+/** 查重之後到寫入之前（例如等抓網頁時），別的請求可能先存了同一個網址：撞到 url 的 UNIQUE 時回既有書籤的 id */
+async function insertOrExisting(db: D1Database, input: Parameters<typeof insertBookmark>[1]): Promise<Bookmark | number> {
+  try {
+    return await insertBookmark(db, input);
+  } catch (err) {
+    const existing = String(err).includes('UNIQUE constraint failed: bookmarks.url') ? await findIdByUrl(db, input.url) : null;
+    if (existing) return existing;
+    throw err;
+  }
 }
 
 /** 只更新有傳的欄位；url 不可改 */
