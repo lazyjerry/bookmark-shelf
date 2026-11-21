@@ -1,6 +1,6 @@
 # 02 服務綁定與 RPC
 
-> 狀態：已實作。與下面範例的差異：RPC 另有 `overview`、`preview`、`update`、`remove`；共用流程是 `createBookmark(env, ctx, body, appUrl)`，`caller` 由 `BookmarkRpc` 寫進 Workers Logs，不進 D1；`preview` 回 `{ ok, draft, duplicateId }`；`get`、`search`、`overview` 不回 `share_id`；`preview`、`add`、`update`、`remove` 超過速率限制時回 `{ ok: false, reason: 'rate_limited', message, retryAfter }`；`add`、`update` 只取契約內的欄位，多帶的不採用；閘道的契約改成 `describe()`、`call()` 兩個方法（見〈服務自述〉），書籤服務已實作；`search`、`get`、`overview`、`add`、`preview`、`update`、`remove` 還留在 RPC 上，等閘道改用 `call()` 並部署後再移除。只開放查詢與新增的原因見 [06-安全與權限.md](06-安全與權限.md)〈提示注入〉。
+> 狀態：已實作。`BookmarkRpc` 只有 `describe()`、`call()` 兩個方法（見〈服務自述〉）；早期的 `search`、`get`、`overview`、`add`、`preview`、`update`、`remove` 在閘道改用 `call()` 後已移除。與下面範例的差異：另有 `bookmarks_overview`；`caller` 由 `src/rpc.ts` 寫進 Workers Logs，不進 D1；書籤不回 `share_id`；新增只取契約內的欄位，多帶的不採用。只開放查詢與新增的原因見 [06-安全與權限.md](06-安全與權限.md)〈提示注入〉。
 
 ## 概念
 
@@ -18,20 +18,33 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { getBookmark, listBookmarks } from './db';
 import { createBookmark } from './bookmarks'; // 與 REST 共用的新增流程
+import { callTool, describeService, type ToolOps } from './tools';
+
+// tool 實際執行的操作。不寫成 BookmarkRpc 的方法：class 上的 public 方法都會開放成 RPC，
+// 呼叫者就能繞過 call() 的參數驗證與閘道的授權範圍
+function toolOps(env: Env, ctx: ExecutionContext): ToolOps {
+  return {
+    async search(params) {
+      const limit = Math.min(Math.max(params.limit ?? 24, 1), 100);
+      return listBookmarks(env.DB, { ...params, limit, offset: params.offset ?? 0 });
+    },
+    async get(id) {
+      return (await getBookmark(env.DB, id)) ?? null;
+    },
+    async add(input, caller) {
+      // 通知信、webhook 用 ctx.waitUntil 在背景送出，跟 REST 一樣
+      return createBookmark(env, ctx, input, env.APP_URL ?? '');
+    },
+  };
+}
 
 export class BookmarkRpc extends WorkerEntrypoint<Env> {
-  async search(params: { q?: string; tag?: string; limit?: number; offset?: number }) {
-    const limit = Math.min(Math.max(params.limit ?? 24, 1), 100);
-    return listBookmarks(this.env.DB, { ...params, limit, offset: params.offset ?? 0 });
+  async describe() {
+    return describeService();
   }
 
-  async get(id: number) {
-    return (await getBookmark(this.env.DB, id)) ?? null;
-  }
-
-  async add(input: { url: string; note?: string }, caller: { client: string }) {
-    // 通知信、webhook 用 this.ctx.waitUntil 在背景送出，跟 REST 一樣
-    return createBookmark(this.env, this.ctx, input, caller);
+  async call(tool: string, args: unknown, caller: { client: string }) {
+    return callTool(toolOps(this.env, this.ctx), tool, args, caller);
   }
 }
 ```
@@ -100,7 +113,7 @@ async describe() {
 }
 
 async call(tool: string, args: unknown, caller: Caller) {
-  return callTool(this, tool, args, caller);
+  return callTool(toolOps(this.env, this.ctx), tool, args, caller);
 }
 ```
 

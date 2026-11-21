@@ -22,7 +22,7 @@
 - **免登入路徑**：加進 `src/index.ts` 的 `PUBLIC_PATHS`，並在 README〈隱私與安全〉寫明為什麼免登入、不含哪些資料。
 - **開放給應用程式帳密的 API**：加進 `src/index.ts` 的 `APP_PATH`，並同步 README〈隱私與安全〉與 `API.md` 列出的可呼叫路徑。
 - **書籤的新增、更新、刪除邏輯**：改在 `src/bookmarks.ts`，REST handler 與 `BookmarkRpc` 都呼叫它，不寫回個別 handler。
-- **`src/rpc.ts` 的 `BookmarkRpc`**：與 MCP 閘道的契約是 `describe()`（服務名稱、授權範圍、tool 清單）與 `call(tool, args, caller)` 兩個方法的形狀，閘道 repo 裡沒有書籤服務專屬的程式。tool、範圍、參數限制與回應文字改在 `src/tools.ts`，部署後閘道就會拿到，不必改閘道；tool 名稱以 `bookmarks_` 開頭、範圍以 `bookmarks:` 開頭，不符合的會被閘道丟掉。要改 `describe()`／`call()` 本身的形狀時，照「這邊先新增 → 閘道改用 → 這邊再移除舊的」分次部署，見 `docs/教學/05-本機開發與部署.md`〈改 RPC 介面時〉。
+- **`src/rpc.ts` 的 `BookmarkRpc`**：與 MCP 閘道的契約是 `describe()`（服務名稱、授權範圍、tool 清單）與 `call(tool, args, caller)` 兩個方法的形狀，閘道 repo 裡沒有書籤服務專屬的程式。tool、範圍、參數限制與回應文字改在 `src/tools.ts`，部署後閘道就會拿到，不必改閘道；tool 名稱以 `bookmarks_` 開頭、範圍以 `bookmarks:` 開頭，不符合的會被閘道丟掉。RPC 上只有這兩個方法：tool 要用的操作寫在 `src/rpc.ts` 的 `toolOps()`，不加成 `BookmarkRpc` 的方法（class 上的 public 方法都會開放成 RPC，等於繞過 `call()` 的參數驗證）。要改 `describe()`／`call()` 本身的形狀時，照「這邊先新增 → 閘道改用 → 這邊再移除舊的」分次部署，見 `docs/教學/05-本機開發與部署.md`〈改 RPC 介面時〉。
 
 ## 設定的限制
 
