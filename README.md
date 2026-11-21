@@ -91,6 +91,7 @@ npx wrangler deploy --domain <你的網域>
 | 名稱 | 說明 |
 |---|---|
 | `GITHUB_TOKEN` | GitHub Personal Access Token（secret）。未設定時 GitHub API 常因共用 IP 達到速率上限而退回一般爬蟲；要讀 Private Repo 時需給 repo 讀取權限。設定：`npx wrangler secret put GITHUB_TOKEN` |
+| `APP_URL` | 這個 Worker 的網址，例如 `https://<你的網域>`。經服務綁定 RPC（MCP 閘道）新增書籤時，通知信裡的連結與圖示用它；REST 新增取自請求網址，不需要這個變數 |
 
 ### 新增書籤通知信
 
@@ -118,7 +119,10 @@ cp .dev.vars.example .dev.vars           # 修改 AUTH_PASS
 npm run db:migrations:local
 npm run dev                              # http://localhost:8787
 npm run typecheck
+npm test                                 # Vitest，在本機 Workers runtime 跑 REST 與 BookmarkRpc 的測試
 ```
+
+測試用 `vitest.config.ts` 裡的測試帳密、`AI_ENABLED=false`，對外網頁與寄信都在測試裡攔截，不會連外也不會呼叫 Workers AI。
 
 本機開發時 AI binding 仍會呼叫遠端 Workers AI，需先 `npx wrangler login`，並可能產生用量費用。
 
@@ -322,6 +326,8 @@ python3 scripts/generate-icons.py
 ├── shortcuts/                  Apple 捷徑的原始檔（XML plist），說明見 SHORTCUTS.md
 ├── src/
 │   ├── index.ts                路由、Basic Auth、API
+│   ├── bookmarks.ts            新增、更新、刪除書籤的共用流程（REST 與 RPC 共用）
+│   ├── rpc.ts                  BookmarkRpc：給 MCP 閘道的服務綁定 RPC 入口
 │   ├── crawler.ts              網址正規化與 HTMLRewriter 擷取 meta
 │   ├── enrich.ts               擴充器 → 爬蟲 → AI 的草稿流程
 │   ├── ai.ts                   Workers AI 標題、摘要、分類、標籤
@@ -335,5 +341,7 @@ python3 scripts/generate-icons.py
 │   ├── apps.ts                 應用程式帳密的建立、驗證、刪除與呼叫紀錄
 │   ├── share.ts                書籤中轉頁的公開欄位、og meta 與縮圖轉送
 │   └── extractors/             網域擴充器
+├── test/                       Vitest 測試（REST 特性測試、BookmarkRpc）
+├── vitest.config.ts            測試設定：Workers runtime、測試用帳密與 migrations
 └── wrangler.jsonc
 ```

@@ -496,4 +496,5 @@ app.onError((err, c) => {
   return c.json({ error: '伺服器錯誤，請稍後再試' }, 500);
 });
 
+export { BookmarkRpc } from './rpc';
 export default app;
