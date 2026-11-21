@@ -6,18 +6,15 @@ import {
   countAppCredentials, createAppCredential, deleteAppCredential, listAppCredentials, listAppLogs, LOG_DEFAULTS, LOG_MAX, MAX_APP_CREDENTIALS, recordAppLog,
   touchAppCredential, updateAppCredential, verifyAppCredential, type AppCredential, type LogRetention,
 } from './apps';
-import { CrawlError, normalizeUrl, safeUrl } from './crawler';
-import {
-  deleteBookmark, findIdByUrl, getBookmark, getOverview, insertBookmark, listBookmarks, normalizeTags, recordClick,
-  updateBookmark, type BookmarkPatch,
-} from './db';
+import { createBookmark, editBookmark, removeBookmark, text } from './bookmarks';
+import { CrawlError, safeUrl } from './crawler';
+import { findIdByUrl, getBookmark, getOverview, listBookmarks, recordClick } from './db';
 import { buildDraft } from './enrich';
 import { EXTRACTORS } from './extractors';
 import { isEmail, loadMailSettings, MAX_RECIPIENTS, saveMailSettings, sendBookmarkMail } from './mailer';
 import { checkCredentials, getSettings, loadCredentials, putSettings, type Credentials } from './settings';
-import { hostOf, siteOf } from './sites';
 import type { Bookmark } from './types';
-import { dispatchEvent, testWebhook, WEBHOOK_EVENTS, WEBHOOK_METHODS, type Webhook, type WebhookEvent } from './webhooks';
+import { dispatchEvent, testWebhook, WEBHOOK_EVENTS, WEBHOOK_METHODS, type Webhook } from './webhooks';
 import {
   authenticatePasskey, authenticationOptions, deletePasskey, listPasskeys, PasskeyError, registerPasskey, registrationOptions,
 } from './passkeys';
@@ -31,10 +28,6 @@ type AppContext = Context<AppEnv>;
 const app = new Hono<AppEnv>();
 
 class BadRequest extends Error {}
-
-function text(value: unknown, max: number): string {
-  return typeof value === 'string' ? value.trim().slice(0, max) : '';
-}
 
 function parseId(c: AppContext): number {
   const id = Number(c.req.param('id'));
@@ -50,20 +43,6 @@ async function readJson(c: AppContext): Promise<Record<string, unknown>> {
     // 落到下方的錯誤
   }
   throw new BadRequest('請求內容必須是 JSON 物件');
-}
-
-function emit(c: AppContext, event: WebhookEvent, bookmark: Bookmark) {
-  c.executionCtx.waitUntil(
-    dispatchEvent(c.env.DB, event, bookmark).catch((err) => console.error(JSON.stringify({ message: 'webhook dispatch failed', event, error: String(err) }))),
-  );
-}
-
-function notifyCreated(c: AppContext, bookmark: Bookmark) {
-  c.executionCtx.waitUntil(
-    sendBookmarkMail(c.env, bookmark, new URL(c.req.url).origin)
-      .then((results) => results.forEach((r) => console.log(JSON.stringify({ message: 'mail', bookmark: bookmark.id, to: r.to, status: r.status }))))
-      .catch((err) => console.error(JSON.stringify({ message: 'mail failed', bookmark: bookmark.id, error: String(err) }))),
-  );
 }
 
 // 測試用：最新一筆書籤，沒有就用範例資料
@@ -201,30 +180,10 @@ app.get('/api/bookmarks', async (c) => {
 
 // 只給 url 時自動抓取並產生內容（方便捷徑、外部程式直接呼叫）；有 title 時以傳入的欄位為準
 app.post('/api/bookmarks', async (c) => {
-  const body = await readJson(c);
-  const url = normalizeUrl(text(body.url, 2048));
-  const existing = await findIdByUrl(c.env.DB, url);
-  if (existing) return c.json({ error: '這個網址已經收藏過了', id: existing }, 409);
-
-  const target = new URL(url);
-  const draft = typeof body.title === 'string' && body.title.trim() ? null : await buildDraft(c.env, url);
-  const extra = body.extra && typeof body.extra === 'object' && !Array.isArray(body.extra) ? (body.extra as Record<string, unknown>) : {};
-  const bookmark = await insertBookmark(c.env.DB, {
-    url,
-    title: draft?.title ?? text(body.title, 300),
-    summary: draft?.summary ?? text(body.summary, 2000),
-    category: draft?.category ?? text(body.category, 40),
-    tags: draft?.tags ?? normalizeTags(body.tags),
-    note: text(body.note, 5000),
-    thumbnail: draft?.thumbnail ?? safeUrl(text(body.thumbnail, 2048)),
-    favicon: draft?.favicon ?? safeUrl(text(body.favicon, 2048)),
-    site: siteOf(target),
-    host: hostOf(target),
-    extra: draft?.extra ?? extra,
-  });
-  emit(c, 'bookmark.created', bookmark);
-  notifyCreated(c, bookmark);
-  return c.json({ bookmark }, 201);
+  const result = await createBookmark(c.env, c.executionCtx, await readJson(c), new URL(c.req.url).origin);
+  if (result.ok) return c.json({ bookmark: result.bookmark }, 201);
+  if (result.reason === 'duplicate') return c.json({ error: '這個網址已經收藏過了', id: result.id }, 409);
+  return c.json({ error: result.reason === 'invalid' ? result.message : '請求不正確' }, 400);
 });
 
 app.get('/api/bookmarks/:id', async (c) => {
@@ -234,27 +193,13 @@ app.get('/api/bookmarks/:id', async (c) => {
 
 app.patch('/api/bookmarks/:id', async (c) => {
   const id = parseId(c);
-  const body = await readJson(c);
-  const limits = { title: 300, summary: 2000, category: 40, note: 5000, thumbnail: 2048 } as const;
-  const patch: BookmarkPatch = {};
-  for (const [key, max] of Object.entries(limits) as [keyof typeof limits, number][]) {
-    if (body[key] !== undefined) patch[key] = text(body[key], max);
-  }
-  if (patch.thumbnail) patch.thumbnail = safeUrl(patch.thumbnail);
-  if (body.tags !== undefined) patch.tags = normalizeTags(body.tags);
-  if (!(await getBookmark(c.env.DB, id))) return c.json({ error: '找不到書籤' }, 404);
-  const bookmark = (await updateBookmark(c.env.DB, id, patch))!;
-  emit(c, 'bookmark.updated', bookmark);
-  return c.json({ bookmark });
+  const result = await editBookmark(c.env, c.executionCtx, id, await readJson(c));
+  return result.ok ? c.json({ bookmark: result.bookmark }) : c.json({ error: '找不到書籤' }, 404);
 });
 
 app.delete('/api/bookmarks/:id', async (c) => {
-  const id = parseId(c);
-  const bookmark = await getBookmark(c.env.DB, id);
-  if (!bookmark) return c.json({ error: '找不到書籤' }, 404);
-  await deleteBookmark(c.env.DB, id);
-  emit(c, 'bookmark.deleted', bookmark);
-  return c.json({ ok: true });
+  const result = await removeBookmark(c.env, c.executionCtx, parseId(c));
+  return result.ok ? c.json({ ok: true }) : c.json({ error: '找不到書籤' }, 404);
 });
 
 // 書籤中轉頁：列表點開書籤先到這裡，未登入也能瀏覽（auth middleware 以 SHARE_PATH 放行）
