@@ -52,7 +52,7 @@ export default new OAuthProvider({
 1. client 動態註冊後，把你導到 `<閘道網域>/authorize`。
 2. `authHandler` 用 `env.OAUTH_PROVIDER.parseAuthRequest(request)` 解析授權請求。
 3. 還沒登入就先顯示登入頁（密碼或 Passkey）。
-4. 顯示同意頁：client 名稱，以及可勾選的服務與權限（例如 `bookmarks:read`、`bookmarks:fetch`、`bookmarks:write`，各範圍的意思見 [06](06-安全與權限.md)）。
+4. 顯示同意頁：client 名稱，以及可勾選的服務與權限（例如 `bookmarks:read`、`bookmarks:write`，各範圍的意思見 [06](06-安全與權限.md)）。
 5. 你按同意後呼叫 `env.OAUTH_PROVIDER.completeAuthorization({ request, userId, scope, props, metadata })`，把勾選結果放進 `props`。
 6. client 換到 access token，之後每次呼叫 `/mcp`，`apiHandler` 都能從 `ctx.props` 讀到當初授權的範圍。
 
