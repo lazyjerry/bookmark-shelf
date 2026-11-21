@@ -5,6 +5,7 @@ import { CrawlError } from './crawler';
 import { findIdByUrl, getBookmark, getOverview, listBookmarks } from './db';
 import { buildDraft } from './enrich';
 import { RateLimitError } from './ratelimit';
+import { callTool, describeService } from './tools';
 import type { Bookmark } from './types';
 
 export interface SearchParams {
@@ -115,5 +116,15 @@ export class BookmarkRpc extends WorkerEntrypoint<Env> {
     const result = await removeBookmark(this.env, this.ctx, id);
     logCall('remove', caller, id, result);
     return stripResult(result);
+  }
+
+  /** 服務自述：同意頁顯示的名稱、授權範圍、tool 清單（含 JSON Schema）。閘道不寫死這些，啟動後向每個服務要 */
+  async describe() {
+    return describeService();
+  }
+
+  /** 執行 describe() 列出的 tool。參數在這裡驗證，可預期的失敗回 { ok: false, message }，不丟例外 */
+  async call(tool: string, args: unknown, caller: Caller) {
+    return callTool(this, tool, args, caller);
   }
 }

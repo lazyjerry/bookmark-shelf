@@ -333,6 +333,7 @@ python3 scripts/generate-icons.py
 │   ├── index.ts                路由、Basic Auth、API
 │   ├── bookmarks.ts            新增、更新、刪除書籤的共用流程（REST 與 RPC 共用）
 │   ├── rpc.ts                  BookmarkRpc：給 MCP 閘道的服務綁定 RPC 入口
+│   ├── tools.ts                給 MCP 閘道的服務自述：授權範圍、tool 清單與參數驗證（describe、call）
 │   ├── ratelimit.ts            速率限制：抓取、寫入的最短間隔（RATE_LIMITS）
 │   ├── crawler.ts              網址正規化與 HTMLRewriter 擷取 meta
 │   ├── enrich.ts               擴充器 → 爬蟲 → AI 的草稿流程

@@ -234,3 +234,128 @@ describe('抓取網頁期間，同一個網址被別的請求先收藏', () => {
     expect([res.status, ((await res.json()) as Json).id]).toEqual([409, (await existing()).id]);
   });
 });
+
+// 服務自述：閘道不寫死 tool，改呼叫 describe() 取清單、call() 執行
+describe('describe', () => {
+  it('回服務名稱、兩個範圍與四個 tool，名稱都帶 bookmarks 前綴', async () => {
+    const info = await rpc().describe();
+    expect(info.label).toBe('書籤收藏櫃');
+    expect(info.scopes.map((s: Json) => [s.scope, s.defaultChecked])).toEqual([
+      ['bookmarks:read', true],
+      ['bookmarks:write', false],
+    ]);
+    for (const scope of info.scopes) expect(scope).toEqual({ scope: expect.any(String), label: expect.any(String), description: expect.any(String), defaultChecked: expect.any(Boolean) });
+    expect(info.tools.map((t: Json) => t.name)).toEqual(['bookmarks_search', 'bookmarks_get', 'bookmarks_overview', 'bookmarks_add']);
+    for (const tool of info.tools) {
+      expect(Object.keys(tool).sort()).toEqual(['annotations', 'description', 'inputSchema', 'name', 'scopes', 'title']);
+      expect(tool.name.startsWith('bookmarks_')).toBe(true);
+      expect(tool.inputSchema.type).toBe('object');
+      expect(tool.scopes.length).toBeGreaterThan(0);
+      for (const scope of tool.scopes) expect(info.scopes.map((s: Json) => s.scope)).toContain(scope);
+    }
+  });
+
+  it('bookmarks_add 的 url、title、summary 必填，只有它需要 bookmarks:write', async () => {
+    const tools: Json[] = (await rpc().describe()).tools;
+    const add = tools.find((t) => t.name === 'bookmarks_add')!;
+    expect([...add.inputSchema.required].sort()).toEqual(['summary', 'title', 'url']);
+    expect(add.annotations).toEqual({ readOnlyHint: false, destructiveHint: false, openWorldHint: false });
+    expect(tools.filter((t) => t.scopes.includes('bookmarks:write')).map((t) => t.name)).toEqual(['bookmarks_add']);
+    for (const tool of tools.filter((t) => t !== add)) expect(tool.annotations).toEqual({ readOnlyHint: true, openWorldHint: false });
+  });
+});
+
+describe('call', () => {
+  const call = (tool: unknown, args?: unknown) => rpc().call(tool, args, caller);
+
+  it('bookmarks_search 回 { notice, items, hasMore }，notice 在最前面', async () => {
+    await restAdd({ url: 'https://site.test/call-search', title: '呼叫搜尋' });
+    const result = await call('bookmarks_search', { q: '呼叫搜尋' });
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.data)).toEqual(['notice', 'items', 'hasMore']);
+    expect(result.data.notice).toContain('提示注入');
+    expect(result.data.items.map((b: Json) => b.title)).toEqual(['呼叫搜尋']);
+    expect(result.data.items[0]).not.toHaveProperty('share_id');
+  });
+
+  it('bookmarks_get 回 { notice, bookmark }；找不到回 ok: false 與說明', async () => {
+    const created = await restAdd({ url: 'https://site.test/call-get', title: '呼叫讀取' });
+    const result = await call('bookmarks_get', { id: created.id });
+    expect(Object.keys(result.data)).toEqual(['notice', 'bookmark']);
+    expect(result.data.bookmark.title).toBe('呼叫讀取');
+    expect(await call('bookmarks_get', { id: 99999 })).toEqual({ ok: false, message: '找不到 id 為 99999 的書籤' });
+  });
+
+  it('bookmarks_overview 回 notice 加概況', async () => {
+    await restAdd({ url: 'https://site.test/call-overview', title: '呼叫概況', category: '呼叫分類' });
+    const result = await call('bookmarks_overview', {});
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.data)[0]).toBe('notice');
+    expect(result.data.categories).toContainEqual({ name: '呼叫分類', count: 1 });
+    expect(result.data.total).toBeGreaterThan(0);
+  });
+
+  it('bookmarks_add 回 { bookmark }，不帶 notice、不連外，caller 寫進 log', async () => {
+    const log = vi.spyOn(console, 'log');
+    const result = await call('bookmarks_add', { url: 'https://site.test/call-add', title: ' 呼叫新增 ', summary: '摘要', tags: ['甲'] });
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.data)).toEqual(['bookmark']);
+    expect(result.data.bookmark).toMatchObject({ title: '呼叫新增', summary: '摘要', tags: ['甲'] });
+    expect(result.data.bookmark).not.toHaveProperty('share_id');
+    expect(outbound.mock.calls.map(([input]) => String(input instanceof Request ? input.url : input))).not.toContain('https://site.test/call-add');
+    expect(log.mock.calls.map(([line]) => String(line)).join('\n')).toContain('"client":"test-client"');
+  });
+
+  it('bookmarks_add 重複網址回既有 id', async () => {
+    const created = await restAdd({ url: 'https://site.test/call-dup', title: '重複' });
+    expect(await call('bookmarks_add', { url: 'https://site.test/call-dup', title: '又一次', summary: '摘要' })).toEqual({ ok: false, message: `這個網址已經收藏過了（既有書籤 id：${created.id}）` });
+  });
+
+  it('bookmarks_add 網址格式錯誤回書籤服務的訊息', async () => {
+    expect(await call('bookmarks_add', { url: 'ftp://site.test/x', title: 'x', summary: 'y' })).toEqual({ ok: false, message: '只支援 http 與 https 網址' });
+  });
+
+  it('bookmarks_add 的 title、summary 全空白或沒帶時擋下，不寫入、不連外', async () => {
+    const bad = [
+      { url: 'https://site.test/call-blank', title: '   ', summary: '摘要' },
+      { url: 'https://site.test/call-blank', title: '標題', summary: ' \n ' },
+      { url: 'https://site.test/call-blank', summary: '摘要' },
+      { url: 'https://site.test/call-blank', title: '標題' },
+    ];
+    for (const args of bad) {
+      const result = await call('bookmarks_add', args);
+      expect(result.ok, JSON.stringify(args)).toBe(false);
+      expect(result.message).toContain('參數不正確');
+    }
+    expect((await rpc().search({ q: 'call-blank' })).items).toEqual([]);
+    expect(outbound).not.toHaveBeenCalled();
+  });
+
+  it('參數型別不對回 ok: false，不丟例外', async () => {
+    const bad: [string, unknown][] = [
+      ['bookmarks_get', { id: '3' }],
+      ['bookmarks_get', { id: 1.5 }],
+      ['bookmarks_get', {}],
+      ['bookmarks_get', null],
+      ['bookmarks_get', 'x'],
+      ['bookmarks_search', { limit: 500 }],
+      ['bookmarks_search', { q: 1 }],
+      ['bookmarks_add', { url: 1, title: 't', summary: 's' }],
+      ['bookmarks_add', { url: 'https://site.test/call-type', title: 't', summary: 's', tags: '甲,乙' }],
+    ];
+    for (const [tool, args] of bad) {
+      const result = await call(tool, args);
+      expect(result.ok, `${tool} ${JSON.stringify(args)}`).toBe(false);
+      expect(result.message).toContain('參數不正確');
+      expect(result.message).not.toMatch(/\bat |src\/|node_modules/);
+    }
+  });
+
+  it('不認得的 tool（含沒開放的 update、remove、preview 與原型上的鍵）回 ok: false', async () => {
+    for (const tool of ['bookmarks_update', 'bookmarks_remove', 'bookmarks_preview', 'nope', 'constructor', '', 3, null]) {
+      const result = await call(tool, {});
+      expect(result.ok, String(tool)).toBe(false);
+      expect(result.message).toContain('不認得的 tool');
+    }
+  });
+});
