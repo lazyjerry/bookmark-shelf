@@ -49,7 +49,7 @@ REST 的 `POST /api/bookmarks` handler 裡有「正規化網址 → 查重 → `
 ## 閘道端：宣告 binding
 
 ```jsonc
-// 閘道的 wrangler.jsonc
+// 閘道的 wrangler.jsonc（不進版控，從 wrangler.example.jsonc 複製後填 services）
 {
   "name": "mcp-gateway",
   "services": [
@@ -61,7 +61,7 @@ REST 的 `POST /api/bookmarks` handler 裡有「正規化網址 → 查重 → `
 - `service` 是書籤 Worker 的 `name`（本專案 `wrangler.jsonc` 裡的 `bookmark-shelf`）。
 - `entrypoint` 是匯出的 class 名稱；省略時綁的是 `export default`（也就是 HTTP 的 fetch）。
 
-閘道 repo 不放任何服務的資訊：接上哪些服務寫在 secret `SERVICES`（逗號分隔的 binding 名稱，例如 `BOOKMARKS`），binding 的宣告怎麼留在版控外，見 [05](05-本機開發與部署.md)。
+閘道 repo 不放任何服務的資訊：上面這份 `wrangler.jsonc` 列入 `.gitignore`，repo 只追蹤不含 `services` 的 `wrangler.example.jsonc`；接上哪些服務寫在 `SERVICES`（逗號分隔的 binding 名稱，例如 `BOOKMARKS`），本機放 `.dev.vars`，線上是 secret。檔案配置見 [05](05-本機開發與部署.md)〈專案放哪裡〉。
 
 ## 服務自述：`describe()` 與 `call()`
 
@@ -86,7 +86,7 @@ interface Service {
 }
 ```
 
-- **`describe()`** 回傳純物件。閘道用 `scopes` 產生同意頁的勾選項目，用 `tools` 回應 `tools/list`，`inputSchema` 原樣交給 AI client。
+- **`describe()`** 回傳純物件。閘道用 `scopes` 產生同意頁的勾選項目，用 `tools` 回應 `tools/list`，`inputSchema` 原樣交給 AI client。結果在閘道的同一個 isolate 留 60 秒，服務改了 tool 或範圍，部署後最多一分鐘生效。
 - **`call()`** 執行一個 tool。可預期的結果（找不到、重複、參數不合法、超過速率限制、不認得的 tool 名稱）回 `{ ok: false, message }`，`message` 會原樣顯示給 AI client，不放堆疊與內部路徑；只有真正的例外才 throw。
 - **閘道強制前綴**：閘道以 binding 名稱小寫當服務名稱（`BOOKMARKS` → `bookmarks`），tool 名稱不是 `bookmarks_` 開頭、範圍不是 `bookmarks:` 開頭的一律丟掉。一個服務無法宣告或冒用別的服務的 tool 與範圍。
 - **服務自己驗參數**：閘道只拿 `inputSchema` 做 JSON Schema 驗證，服務不能假設參數已經驗過。JSON Schema 也表達不了所有規則，例如「去掉空白後不為空」。
