@@ -92,3 +92,19 @@ describe('DELETE /api/bookmarks/:id', () => {
     expect((await api(`/api/bookmarks/${created.bookmark.id}`)).status).toBe(404);
   });
 });
+
+// 原本在 RPC 的 search 驗，RPC 改成只有 call() 後 sort 只剩 REST 收
+describe('GET /api/bookmarks 的 sort', () => {
+  it('不在清單裡的值（含 constructor 這類原型上的鍵）照預設排序，不出錯', async () => {
+    await api('/api/bookmarks', { method: 'POST', body: { url: 'https://site.test/sort-a', title: '排序 A' } });
+    await api('/api/bookmarks', { method: 'POST', body: { url: 'https://site.test/sort-b', title: '排序 B' } });
+    const ids = async (sort?: string) => {
+      const res = await api(`/api/bookmarks?q=${encodeURIComponent('排序')}${sort === undefined ? '' : `&sort=${encodeURIComponent(sort)}`}`);
+      expect(res.status, sort).toBe(200);
+      return ((await res.json()) as Json).items.map((b: Json) => b.id);
+    };
+    const expected = await ids();
+    expect(expected).toHaveLength(2);
+    for (const sort of ['constructor', 'toString', '__proto__', 'nope']) expect(await ids(sort), sort).toEqual(expected);
+  });
+});

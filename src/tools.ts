@@ -9,7 +9,7 @@ z.config(zhTW());
 
 export type ToolOutcome = { ok: true; data: unknown } | { ok: false; message: string };
 
-/** tool 實際執行的操作，由 BookmarkRpc 提供。書籤不含 share_id */
+/** tool 實際執行的操作，由 src/rpc.ts 的 toolOps() 提供。書籤不含 share_id */
 export interface ToolOps {
   search(params: { q?: string; site?: string; tag?: string; category?: string; limit?: number; offset?: number }): Promise<object>;
   get(id: number): Promise<object | null>;

@@ -50,15 +50,15 @@ describe('寫入名額（新增、更新、刪除共用）', () => {
     expect((await api('/api/bookmarks', { method: 'POST', body: { url: blockedUrl, title: '第二筆' } })).status).toBe(201);
   });
 
-  it('RPC：間隔內第二次寫入回 rate_limited', async () => {
+  it('RPC：間隔內第二次 bookmarks_add 回 ok: false 與限流說明，不寫入', async () => {
     RATE_LIMITS.write = LONG;
-    const first = await rpc().add({ url: nextUrl(), title: '第一筆' }, CALLER);
-    const id = first.bookmark.id;
-    const add = await rpc().add({ url: nextUrl(), title: '第二筆' }, CALLER);
-    expect(add).toMatchObject({ ok: false, reason: 'rate_limited', retryAfter: 60 });
-    expect(add.message).toContain('太頻繁');
-    expect(await rpc().update(id, { note: 'x' }, CALLER)).toMatchObject({ ok: false, reason: 'rate_limited' });
-    expect(await rpc().remove(id, CALLER)).toMatchObject({ ok: false, reason: 'rate_limited' });
+    const add = (url: string, title: string) => rpc().call('bookmarks_add', { url, title, summary: '摘要' }, CALLER);
+    expect((await add(nextUrl(), '第一筆')).ok).toBe(true);
+    const blocked = await add(nextUrl(), '限流擋下的');
+    expect(blocked.ok).toBe(false);
+    expect(blocked.message).toContain('太頻繁');
+    expect(blocked.message).toContain('一次只送一個 tool 呼叫');
+    expect(((await (await api(`/api/bookmarks?q=${encodeURIComponent('限流擋下的')}`)).json()) as Json).items).toEqual([]);
   });
 
   it('找不到書籤、網址重複不佔名額', async () => {
@@ -72,7 +72,7 @@ describe('寫入名額（新增、更新、刪除共用）', () => {
 });
 
 describe('抓取名額（預覽、只給網址的新增共用）', () => {
-  it('間隔內第二次預覽：REST 回 429、RPC 回 rate_limited，都不抓網頁', async () => {
+  it('間隔內第二次預覽回 429，不抓網頁', async () => {
     RATE_LIMITS.draft = LONG;
     expect((await api('/api/preview', { method: 'POST', body: { url: nextUrl() } })).status).toBe(200);
     outbound.mockClear();
@@ -80,7 +80,6 @@ describe('抓取名額（預覽、只給網址的新增共用）', () => {
     const res = await api('/api/preview', { method: 'POST', body: { url: nextUrl() } });
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('60');
-    expect(await rpc().preview(nextUrl())).toMatchObject({ ok: false, reason: 'rate_limited', retryAfter: 60 });
     // 只給網址的新增也要抓網頁
     expect((await api('/api/bookmarks', { method: 'POST', body: { url: nextUrl() } })).status).toBe(429);
     expect(outbound).not.toHaveBeenCalled();

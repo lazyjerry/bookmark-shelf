@@ -19,51 +19,62 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('search', () => {
-  it('回傳與 GET /api/bookmarks?q= 相同的 items、hasMore', async () => {
+const caller = { client: 'test-client' };
+const call = (tool: unknown, args?: unknown) => rpc().call(tool, args, caller);
+
+// RPC 只剩 describe()、call()。舊方法若還在，閘道以外的呼叫者就能繞過 tool 的參數驗證與授權範圍
+describe('舊的 RPC 方法已移除', () => {
+  it('search、get、overview、add、preview、update、remove 都呼叫失敗，不動到資料', async () => {
+    const created = await restAdd({ url: 'https://site.test/legacy', title: '舊方法' });
+    const legacy: [string, unknown[]][] = [
+      ['search', [{}]],
+      ['get', [created.id]],
+      ['overview', []],
+      ['add', [{ url: 'https://site.test/legacy-add', title: '舊方法新增' }, caller]],
+      ['preview', ['https://site.test/legacy-preview']],
+      ['update', [created.id, { title: '被改了' }, caller]],
+      ['remove', [created.id, caller]],
+    ];
+    // RPC stub 的回傳值不是原生 Promise，先轉成 Promise 再看結果
+    for (const [name, args] of legacy) {
+      const outcome = await Promise.resolve(rpc()[name](...args)).then(
+        () => 'resolved',
+        () => 'rejected',
+      );
+      expect(outcome, name).toBe('rejected');
+    }
+    expect((await call('bookmarks_get', { id: created.id })).data.bookmark.title).toBe('舊方法');
+    expect((await call('bookmarks_search', { q: 'legacy-add' })).data.items).toEqual([]);
+  });
+});
+
+describe('bookmarks_search', () => {
+  it('items、hasMore 與 GET /api/bookmarks?q= 相同', async () => {
     await restAdd({ url: 'https://site.test/a', title: 'Hono 入門' });
     await restAdd({ url: 'https://site.test/b', title: '其他主題' });
     await restAdd({ url: 'https://site.test/c', title: 'hono 進階' });
     const rest = (await (await api('/api/bookmarks?q=hono')).json()) as Json;
-    const result = await rpc().search({ q: 'hono' });
+    const result = (await call('bookmarks_search', { q: 'hono' })).data;
     expect(result.items.map((b: Json) => b.title)).toEqual(['hono 進階', 'Hono 入門']);
     expect(result.items.map((b: Json) => b.id)).toEqual(rest.items.map((b: Json) => b.id));
     expect(result.hasMore).toBe(rest.hasMore);
   });
 
-  it('limit 超過 100 時以 100 計', async () => {
+  it('limit 預設 24、上限 100', async () => {
     for (let i = 0; i < 101; i++) await restAdd({ url: `https://site.test/many/${i}`, title: `第 ${i} 筆` });
-    const result = await rpc().search({ limit: 500 });
+    expect((await call('bookmarks_search', {})).data.items).toHaveLength(24);
+    const result = (await call('bookmarks_search', { limit: 100 })).data;
     expect(result.items).toHaveLength(100);
     expect(result.hasMore).toBe(true);
   });
 });
 
-describe('search 的 sort', () => {
-  it('不在清單裡的值（含 constructor 這類原型上的鍵）照預設排序，不出錯', async () => {
-    await restAdd({ url: 'https://site.test/sort-a', title: '排序 A' });
-    await restAdd({ url: 'https://site.test/sort-b', title: '排序 B' });
-    const expected = (await rpc().search({ q: '排序' })).items.map((b: Json) => b.id);
-    for (const sort of ['constructor', 'toString', '__proto__', 'nope']) {
-      expect((await rpc().search({ q: '排序', sort })).items.map((b: Json) => b.id), sort).toEqual(expected);
-    }
-  });
-});
-
-describe('get', () => {
-  it('找得到回書籤，找不到回 null', async () => {
-    const created = await restAdd({ url: 'https://site.test/get', title: '取得' });
-    expect((await rpc().get(created.id)).title).toBe('取得');
-    expect(await rpc().get(99999)).toBeNull();
-  });
-});
-
-describe('overview', () => {
+describe('bookmarks_overview', () => {
   it('回分類、標籤、網站清單', async () => {
     // 同一個測試檔共用 D1，用只在這裡出現的分類與標籤
     await restAdd({ url: 'https://site.test/o1', title: '一', category: '概覽分類', tags: '概覽甲,概覽乙' });
     await restAdd({ url: 'https://site.test/o2', title: '二', category: '概覽分類', tags: '概覽甲' });
-    const result = await rpc().overview();
+    const result = (await call('bookmarks_overview', {})).data;
     expect(result.categories).toContainEqual({ name: '概覽分類', count: 2 });
     expect(result.tags).toContainEqual({ name: '概覽甲', count: 2 });
     expect(result.tags).toContainEqual({ name: '概覽乙', count: 1 });
@@ -71,49 +82,12 @@ describe('overview', () => {
   });
 });
 
-describe('preview', () => {
-  it('回草稿與 duplicateId', async () => {
-    const fresh = await rpc().preview('https://site.test/preview');
-    expect(fresh.draft.title).toBe('測試頁面標題');
-    expect(fresh.duplicateId).toBeNull();
-    const created = await restAdd({ url: 'https://site.test/preview', title: '已收藏' });
-    expect((await rpc().preview('https://site.test/preview')).duplicateId).toBe(created.id);
-  });
-});
-
-describe('preview 連不上網站', () => {
-  it('警告只有固定文字，不帶連線錯誤的細節', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await rpc().preview('https://unreachable.test/x');
-    expect(JSON.stringify(result)).toContain('無法連線到這個網站');
-    expect(JSON.stringify(result)).not.toContain('測試不允許連外');
-  });
-});
-
-const caller = { client: 'test-client' };
-
-describe('add', () => {
-  it('新增成功回 { ok: true, bookmark }', async () => {
-    const result = await rpc().add({ url: 'https://site.test/rpc-add' }, caller);
-    expect(result.ok).toBe(true);
-    expect(result.bookmark.title).toBe('測試頁面標題');
-    expect((await rpc().get(result.bookmark.id)).url).toBe('https://site.test/rpc-add');
-  });
-
-  it('重複網址回 { ok: false, reason: duplicate, id }', async () => {
-    const created = await restAdd({ url: 'https://site.test/rpc-dup', title: '重複' });
-    expect(await rpc().add({ url: 'https://site.test/rpc-dup', title: '又一次' }, caller)).toEqual({ ok: false, reason: 'duplicate', id: created.id });
-  });
-
-  it('網址格式錯誤回 { ok: false, reason: invalid, message }', async () => {
-    expect(await rpc().add({ url: 'ftp://site.test/x', title: 'x' }, caller)).toEqual({ ok: false, reason: 'invalid', message: '只支援 http 與 https 網址' });
-  });
-
+describe('bookmarks_add 的通知', () => {
   it('跟 REST 一樣送出 webhook 與通知信', async () => {
     const send = vi.spyOn(env.EMAIL, 'send').mockResolvedValue({ messageId: 'test-id' } as never);
     await api('/api/webhooks', { method: 'POST', body: { event: 'bookmark.created', url: 'https://hooks.test/rpc-created' } });
     await api('/api/settings/mail', { method: 'PUT', body: { from: 'noreply@bookmarks.test', to: 'owner@bookmarks.test' } });
-    const result = await rpc().add({ url: 'https://site.test/rpc-notify', title: '通知' }, caller);
+    const result = await call('bookmarks_add', { url: 'https://site.test/rpc-notify', title: '通知', summary: '摘要' });
     expect(result.ok).toBe(true);
     await vi.waitFor(() => {
       expect(hookCalls(outbound)).toContain('https://hooks.test/rpc-created');
@@ -124,50 +98,25 @@ describe('add', () => {
 });
 
 describe('契約外的欄位', () => {
-  it('add 不收 extra、thumbnail、favicon', async () => {
-    const result = await rpc().add({ url: 'https://site.test/rpc-extra', title: '多餘欄位', extra: { big: 'x' }, thumbnail: 'https://evil.test/t.png', favicon: 'https://evil.test/f.ico' }, caller);
+  it('bookmarks_add 不收 extra、thumbnail、favicon', async () => {
+    const result = await call('bookmarks_add', { url: 'https://site.test/rpc-extra', title: '多餘欄位', summary: '摘要', extra: { big: 'x' }, thumbnail: 'https://evil.test/t.png', favicon: 'https://evil.test/f.ico' });
     expect(result.ok).toBe(true);
-    expect(result.bookmark.extra).toEqual({});
-    expect(result.bookmark.thumbnail).toBe('');
-    expect(result.bookmark.favicon).toBe('');
-  });
-
-  it('update 不收 thumbnail', async () => {
-    const created = await restAdd({ url: 'https://site.test/rpc-thumb', title: '縮圖' });
-    const result = await rpc().update(created.id, { note: '有改', thumbnail: 'https://evil.test/t.png' }, caller);
-    expect(result.bookmark.note).toBe('有改');
-    expect(result.bookmark.thumbnail).toBe('');
-  });
-});
-
-describe('update、remove', () => {
-  it('update 成功回新內容；找不到回 not_found', async () => {
-    const created = await restAdd({ url: 'https://site.test/rpc-update', title: '舊' });
-    const result = await rpc().update(created.id, { title: '新' }, caller);
-    expect(result.ok).toBe(true);
-    expect(result.bookmark.title).toBe('新');
-    expect(await rpc().update(99999, { title: 'x' }, caller)).toEqual({ ok: false, reason: 'not_found' });
-  });
-
-  it('remove 成功後 get 回 null；找不到回 not_found', async () => {
-    const created = await restAdd({ url: 'https://site.test/rpc-remove', title: '刪' });
-    expect((await rpc().remove(created.id, caller)).ok).toBe(true);
-    expect(await rpc().get(created.id)).toBeNull();
-    expect(await rpc().remove(created.id, caller)).toEqual({ ok: false, reason: 'not_found' });
+    expect(result.data.bookmark.extra).toEqual({});
+    expect(result.data.bookmark.thumbnail).toBe('');
+    expect(result.data.bookmark.favicon).toBe('');
   });
 });
 
 describe('回傳值不含 share_id', () => {
-  it('search、get、overview、add、update、remove 都不帶 share_id', async () => {
-    const added = await rpc().add({ url: 'https://site.test/rpc-share', title: '分享' }, caller);
-    const id = added.bookmark.id;
+  it('bookmarks_search、bookmarks_get、bookmarks_overview、bookmarks_add 都不帶 share_id', async () => {
+    const added = (await call('bookmarks_add', { url: 'https://site.test/rpc-share', title: '分享', summary: '摘要' })).data.bookmark;
+    const overview = (await call('bookmarks_overview', {})).data;
     const results = [
-      added.bookmark,
-      ...(await rpc().search({ q: '分享' })).items,
-      await rpc().get(id),
-      ...(await rpc().overview()).recent,
-      (await rpc().update(id, { note: '備註' }, caller)).bookmark,
-      (await rpc().remove(id, caller)).bookmark,
+      added,
+      ...(await call('bookmarks_search', { q: '分享' })).data.items,
+      (await call('bookmarks_get', { id: added.id })).data.bookmark,
+      ...overview.recent,
+      ...overview.clicked,
     ];
     expect(results.every(Boolean)).toBe(true);
     for (const bookmark of results) expect(bookmark).not.toHaveProperty('share_id');
@@ -175,9 +124,9 @@ describe('回傳值不含 share_id', () => {
 });
 
 describe('呼叫者寫進 Workers Logs', () => {
-  it('add 帶 caller 時，console.log 的 JSON 含 client 與操作名稱', async () => {
+  it('bookmarks_add 的 console.log JSON 含 client、操作名稱與書籤 id', async () => {
     const log = vi.spyOn(console, 'log');
-    const result = await rpc().add({ url: 'https://site.test/rpc-log', title: '紀錄' }, { client: 'test-client' });
+    const result = await call('bookmarks_add', { url: 'https://site.test/rpc-log', title: '紀錄', summary: '摘要' });
     const entries = log.mock.calls.flatMap(([line]) => {
       try {
         return [JSON.parse(String(line)) as Json];
@@ -185,24 +134,17 @@ describe('呼叫者寫進 Workers Logs', () => {
         return [];
       }
     });
-    expect(entries).toContainEqual(expect.objectContaining({ client: 'test-client', op: 'add', bookmark: result.bookmark.id }));
+    expect(entries).toContainEqual(expect.objectContaining({ client: 'test-client', op: 'add', bookmark: result.data.bookmark.id }));
   });
 });
 
 describe('id 不是正整數', () => {
-  const badIds = [0, -1, 1.5, Number.NaN, '3', null];
-
-  it('get 回 null', async () => {
-    for (const id of badIds) expect(await rpc().get(id)).toBeNull();
-  });
-
-  it('update、remove 回 { ok: false, reason: invalid }，不動到資料', async () => {
-    const created = await restAdd({ url: 'https://site.test/bad-id', title: '原標題' });
-    for (const id of badIds) {
-      expect(await rpc().update(id, { title: '被改了' }, { client: 't' })).toEqual({ ok: false, reason: 'invalid', message: 'id 不正確' });
-      expect(await rpc().remove(id, { client: 't' })).toEqual({ ok: false, reason: 'invalid', message: 'id 不正確' });
+  it('bookmarks_get 回參數不正確', async () => {
+    for (const id of [0, -1, 1.5, Number.NaN, '3', null]) {
+      const result = await call('bookmarks_get', { id });
+      expect(result.ok, String(id)).toBe(false);
+      expect(result.message).toContain('參數不正確');
     }
-    expect((await rpc().get(created.id)).title).toBe('原標題');
   });
 });
 
@@ -221,12 +163,6 @@ describe('抓取網頁期間，同一個網址被別的請求先收藏', () => {
     });
     return () => first!;
   }
-
-  it('RPC add 回 duplicate 並帶既有 id', async () => {
-    const existing = saveDuringCrawl('https://site.test/race-rpc');
-    const result = await rpc().add({ url: 'https://site.test/race-rpc' }, { client: 't' });
-    expect(result).toEqual({ ok: false, reason: 'duplicate', id: (await existing()).id });
-  });
 
   it('REST 回 409 並帶既有 id', async () => {
     const existing = saveDuringCrawl('https://site.test/race-rest');
@@ -266,8 +202,6 @@ describe('describe', () => {
 });
 
 describe('call', () => {
-  const call = (tool: unknown, args?: unknown) => rpc().call(tool, args, caller);
-
   it('bookmarks_search 回 { notice, items, hasMore }，notice 在最前面', async () => {
     await restAdd({ url: 'https://site.test/call-search', title: '呼叫搜尋' });
     const result = await call('bookmarks_search', { q: '呼叫搜尋' });
@@ -327,7 +261,7 @@ describe('call', () => {
       expect(result.ok, JSON.stringify(args)).toBe(false);
       expect(result.message).toContain('參數不正確');
     }
-    expect((await rpc().search({ q: 'call-blank' })).items).toEqual([]);
+    expect((await call('bookmarks_search', { q: 'call-blank' })).data.items).toEqual([]);
     expect(outbound).not.toHaveBeenCalled();
   });
 
