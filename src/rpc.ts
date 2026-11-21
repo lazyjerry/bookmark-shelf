@@ -1,9 +1,10 @@
 // 給同帳號其他 Worker（MCP 閘道）用的 RPC 入口。只開放書籤資料操作，不開放設定、帳密、Passkey、寄信設定
 import { WorkerEntrypoint } from 'cloudflare:workers';
-import { createBookmark, editBookmark, removeBookmark, text, type Caller, type MutationResult } from './bookmarks';
+import { createBookmark, editBookmark, rateLimited, removeBookmark, text, type Caller, type MutationResult } from './bookmarks';
 import { CrawlError } from './crawler';
 import { findIdByUrl, getBookmark, getOverview, listBookmarks } from './db';
 import { buildDraft } from './enrich';
+import { RateLimitError } from './ratelimit';
 import type { Bookmark } from './types';
 
 export interface SearchParams {
@@ -79,27 +80,32 @@ export class BookmarkRpc extends WorkerEntrypoint<Env> {
     return { ...overview, recent: overview.recent.map(strip), clicked: overview.clicked.map(strip) };
   }
 
-  /** 抓取網頁產生草稿，不寫入。會連外並可能使用 Workers AI；網址不正確以回傳值表達 */
+  /** 抓取網頁產生草稿，不寫入。會連外並可能使用 Workers AI；網址不正確、超過速率限制以回傳值表達 */
   async preview(url: string) {
     try {
       const draft = await buildDraft(this.env, text(url, 2048));
       return { ok: true as const, draft, duplicateId: await findIdByUrl(this.env.DB, draft.url) };
     } catch (err) {
       if (err instanceof CrawlError) return { ok: false as const, reason: 'invalid' as const, message: err.message };
+      if (err instanceof RateLimitError) return rateLimited(err);
       throw err;
     }
   }
 
   /** 只給 url 時自動抓取並產生內容；帶 title 時以傳入的欄位為準 */
   async add(input: BookmarkFields, caller: Caller) {
-    const result = await createBookmark(this.env, this.ctx, { ...input }, this.env.APP_URL ?? '');
+    // 只取契約內的欄位：extra、thumbnail、favicon 是 REST 才收的，RPC 呼叫者多帶也不採用
+    const { url, title, summary, category, tags, note } = input ?? ({} as BookmarkFields);
+    const result = await createBookmark(this.env, this.ctx, { url, title, summary, category, tags, note }, this.env.APP_URL ?? '');
     logCall('add', caller, null, result);
     return stripResult(result);
   }
 
   async update(id: number, patch: BookmarkChanges, caller: Caller) {
     if (!validId(id)) return INVALID_ID;
-    const result = await editBookmark(this.env, this.ctx, id, { ...patch });
+    // 只取契約內的欄位，理由同 add
+    const { title, summary, category, tags, note } = patch ?? {};
+    const result = await editBookmark(this.env, this.ctx, id, { title, summary, category, tags, note });
     logCall('update', caller, id, result);
     return stripResult(result);
   }

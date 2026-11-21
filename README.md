@@ -92,6 +92,7 @@ npx wrangler deploy --domain <你的網域>
 |---|---|
 | `GITHUB_TOKEN` | GitHub Personal Access Token（secret）。未設定時 GitHub API 常因共用 IP 達到速率上限而退回一般爬蟲；要讀 Private Repo 時需給 repo 讀取權限。設定：`npx wrangler secret put GITHUB_TOKEN` |
 | `APP_URL` | 這個 Worker 的網址，例如 `https://<你的網域>`。經服務綁定 RPC（MCP 閘道）新增書籤時，通知信裡的連結與圖示用它；REST 新增取自請求網址，不需要這個變數 |
+| `RATE_LIMIT_ENABLED` | 設為 `false` 時關閉速率限制，給會連續寫入的自動化測試用；正式環境不要設。限制的間隔寫在 `src/ratelimit.ts` |
 
 ### 新增書籤通知信
 
@@ -152,6 +153,8 @@ npm test                                 # Vitest，在本機 Workers runtime �
 用程式存取書籤（應用程式帳密、header 帶帳密、書籤 CRUD、呼叫紀錄與保留設定、curl／JavaScript／Python 範例）的完整說明見 [API.md](API.md)。以下為所有端點的總表。
 
 除了 `/api/auth/*` 與 `/api/share/*` 之外都需登入：程式呼叫帶 Basic Auth（`AUTH_USER`／`AUTH_PASS`，或設定頁建立的應用程式帳密），瀏覽器用登入頁換到的 Session Cookie。應用程式帳密只能呼叫 `/api/preview` 與 `/api/bookmarks*`。寫入請求需帶 `Content-Type: application/json`。
+
+速率限制：抓取網頁（`POST /api/preview`、只給 `url` 的 `POST /api/bookmarks`）每秒 1 次，書籤的新增、更新、刪除每秒 1 次，全站共用、不分呼叫來源；超過回 429 與 `Retry-After`（秒）。間隔寫在 `src/ratelimit.ts` 的 `RATE_LIMITS`，改完重新部署。
 
 | 方法 | 路徑 | 說明 |
 |---|---|---|
@@ -320,6 +323,7 @@ python3 scripts/generate-icons.py
 ├── migrations/0005_drop_auth_settings.sql 清掉舊版設定頁存的登入帳密
 ├── migrations/0006_app_credentials.sql 應用程式帳密
 ├── migrations/0007_app_logs.sql 應用程式帳密的呼叫紀錄與保留設定
+├── migrations/0008_rate_limits.sql 速率限制上一次放行的時間
 ├── public/                     前端頁面、PWA manifest、Service Worker、圖示
 ├── scripts/generate-icons.py   產生 PWA 圖示
 ├── scripts/change-password.sh  互動更換登入密碼（wrangler secret put AUTH_PASS）
@@ -329,6 +333,7 @@ python3 scripts/generate-icons.py
 │   ├── index.ts                路由、Basic Auth、API
 │   ├── bookmarks.ts            新增、更新、刪除書籤的共用流程（REST 與 RPC 共用）
 │   ├── rpc.ts                  BookmarkRpc：給 MCP 閘道的服務綁定 RPC 入口
+│   ├── ratelimit.ts            速率限制：抓取、寫入的最短間隔（RATE_LIMITS）
 │   ├── crawler.ts              網址正規化與 HTMLRewriter 擷取 meta
 │   ├── enrich.ts               擴充器 → 爬蟲 → AI 的草稿流程
 │   ├── ai.ts                   Workers AI 標題、摘要、分類、標籤
@@ -342,7 +347,7 @@ python3 scripts/generate-icons.py
 │   ├── apps.ts                 應用程式帳密的建立、驗證、刪除與呼叫紀錄
 │   ├── share.ts                書籤中轉頁的公開欄位、og meta 與縮圖轉送
 │   └── extractors/             網域擴充器
-├── test/                       Vitest 測試（REST 特性測試、BookmarkRpc）
+├── test/                       Vitest 測試（REST 特性測試、BookmarkRpc、速率限制）
 ├── vitest.config.ts            測試設定：Workers runtime、測試用帳密與 migrations
 └── wrangler.jsonc
 ```

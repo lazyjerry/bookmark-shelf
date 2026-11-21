@@ -3,8 +3,9 @@ import { CrawlError, normalizeUrl, safeUrl } from './crawler';
 import { deleteBookmark, findIdByUrl, getBookmark, insertBookmark, normalizeTags, updateBookmark, type BookmarkPatch } from './db';
 import { buildDraft } from './enrich';
 import { sendBookmarkMail } from './mailer';
+import { RateLimitError, takeSlot, type RateBucket } from './ratelimit';
 import { hostOf, siteOf } from './sites';
-import type { Bookmark } from './types';
+import type { Bookmark, BookmarkDraft } from './types';
 import { dispatchEvent, type WebhookEvent } from './webhooks';
 
 /** 背景工作只需要 waitUntil：Hono 的 executionCtx 與 WorkerEntrypoint 的 ctx 都有 */
@@ -21,7 +22,31 @@ export type MutationResult =
   | { ok: true; bookmark: Bookmark }
   | { ok: false; reason: 'duplicate'; id: number }
   | { ok: false; reason: 'invalid'; message: string }
-  | { ok: false; reason: 'not_found' };
+  | { ok: false; reason: 'not_found' }
+  | RateLimited;
+
+/** 還在速率限制的間隔內，沒有執行；retryAfter 是幾秒後可以再試 */
+export interface RateLimited {
+  ok: false;
+  reason: 'rate_limited';
+  message: string;
+  retryAfter: number;
+}
+
+export function rateLimited(err: RateLimitError): RateLimited {
+  return { ok: false, reason: 'rate_limited', message: err.message, retryAfter: err.retryAfter };
+}
+
+/** 佔一次名額；還在間隔內回 RateLimited，放行回 null */
+async function limited(env: Env, bucket: RateBucket): Promise<RateLimited | null> {
+  try {
+    await takeSlot(env, bucket);
+    return null;
+  } catch (err) {
+    if (err instanceof RateLimitError) return rateLimited(err);
+    throw err;
+  }
+}
 
 export function text(value: unknown, max: number): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -52,9 +77,19 @@ export async function createBookmark(env: Env, bg: Background, body: Record<stri
   }
   const existing = await findIdByUrl(env.DB, url);
   if (existing) return { ok: false, reason: 'duplicate', id: existing };
+  const blocked = await limited(env, 'write');
+  if (blocked) return blocked;
 
   const target = new URL(url);
-  const draft = typeof body.title === 'string' && body.title.trim() ? null : await buildDraft(env, url);
+  let draft: BookmarkDraft | null = null;
+  if (!(typeof body.title === 'string' && body.title.trim())) {
+    try {
+      draft = await buildDraft(env, url);
+    } catch (err) {
+      if (err instanceof RateLimitError) return rateLimited(err);
+      throw err;
+    }
+  }
   const extra = body.extra && typeof body.extra === 'object' && !Array.isArray(body.extra) ? (body.extra as Record<string, unknown>) : {};
   const bookmark = await insertOrExisting(env.DB, {
     url,
@@ -96,6 +131,8 @@ export async function editBookmark(env: Env, bg: Background, id: number, body: R
   if (patch.thumbnail) patch.thumbnail = safeUrl(patch.thumbnail);
   if (body.tags !== undefined) patch.tags = normalizeTags(body.tags);
   if (!(await getBookmark(env.DB, id))) return { ok: false, reason: 'not_found' };
+  const blocked = await limited(env, 'write');
+  if (blocked) return blocked;
   const bookmark = (await updateBookmark(env.DB, id, patch))!;
   emit(env, bg, 'bookmark.updated', bookmark);
   return { ok: true, bookmark };
@@ -104,6 +141,8 @@ export async function editBookmark(env: Env, bg: Background, id: number, body: R
 export async function removeBookmark(env: Env, bg: Background, id: number): Promise<MutationResult> {
   const bookmark = await getBookmark(env.DB, id);
   if (!bookmark) return { ok: false, reason: 'not_found' };
+  const blocked = await limited(env, 'write');
+  if (blocked) return blocked;
   await deleteBookmark(env.DB, id);
   emit(env, bg, 'bookmark.deleted', bookmark);
   return { ok: true, bookmark };

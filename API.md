@@ -54,6 +54,7 @@ curl 的 `-u 帳號:密碼`、Python requests 的 `auth=(帳號, 密碼)` 都會
 - 請求與回應都是 JSON。`POST`、`PATCH` 必須帶 `Content-Type: application/json`，否則回 415。
 - 寫入請求（`GET` 以外）帶了 `Origin` header 時必須與網站同源，否則回 403（瀏覽器跨站請求的防護；一般程式不會帶這個 header）。
 - 錯誤回應的格式為 `{ "error": "說明" }`。
+- 速率限制：抓取網頁（預覽、只給 `url` 的新增）每秒 1 次，新增、更新、刪除每秒 1 次。名額全站共用，網頁上的操作與其他程式也算在內。超過回 429，`Retry-After` header 是幾秒後可以再試；連續寫入請在兩次之間等 1 秒，收到 429 就等過 `Retry-After` 再送。
 
 | 狀態碼 | 情況 |
 |---|---|
@@ -63,6 +64,7 @@ curl 的 `-u 帳號:密碼`、Python requests 的 `auth=(帳號, 密碼)` 都會
 | 404 | 找不到書籤或 API |
 | 409 | 網址已收藏過，回應會帶既有書籤的 `id` |
 | 415 | 缺少 `Content-Type: application/json` |
+| 429 | 超過速率限制，依 `Retry-After` header 的秒數後再試 |
 | 500 | 伺服器錯誤 |
 | 503 | 伺服器尚未設定 `AUTH_PASS`，整站停用 |
 
@@ -106,6 +108,7 @@ POST /api/bookmarks
 
 - `201`：`{ "bookmark": { … } }`
 - `409`：`{ "error": "這個網址已經收藏過了", "id": 12 }`
+- `429`：`{ "error": "操作太頻繁，請 1 秒後再試" }`
 
 透過 API 新增書籤，同樣會寄通知信、觸發 webhook，跟在網頁上新增一樣。
 

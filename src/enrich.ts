@@ -2,6 +2,7 @@ import { aiEnabled, aiEnrich } from './ai';
 import { fetchPageMeta, normalizeUrl, safeUrl } from './crawler';
 import { getVocabulary, normalizeTags } from './db';
 import { findExtractor, type ExtractResult } from './extractors';
+import { takeSlot } from './ratelimit';
 import { defaultCategoryOf, hostOf, siteOf } from './sites';
 import type { BookmarkDraft, PageMeta } from './types';
 
@@ -26,10 +27,13 @@ function fallbackTitle(url: URL): string {
  * 1. 網域擴充器（有符合的話），失敗或回傳 null 時改走通用爬蟲
  * 2. 規則產生預設的標題、摘要、分類、標籤
  * 3. AI 啟用時改寫標題、摘要並分類；AI 失敗就保留規則結果
+ *
+ * 會連外並可能呼叫 Workers AI，動手前先佔一次抓取名額；還在間隔內就丟 RateLimitError
  */
 export async function buildDraft(env: Env, rawUrl: string): Promise<BookmarkDraft> {
   const url = normalizeUrl(rawUrl);
   const target = new URL(url);
+  await takeSlot(env, 'draft');
   const warnings: string[] = [];
 
   let metaPromise: Promise<PageMeta> | null = null;

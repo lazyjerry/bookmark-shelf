@@ -10,6 +10,7 @@ import { createBookmark, editBookmark, removeBookmark, text } from './bookmarks'
 import { CrawlError, safeUrl } from './crawler';
 import { findIdByUrl, getBookmark, getOverview, listBookmarks, recordClick } from './db';
 import { buildDraft } from './enrich';
+import { RateLimitError } from './ratelimit';
 import { EXTRACTORS } from './extractors';
 import { isEmail, loadMailSettings, MAX_RECIPIENTS, saveMailSettings, sendBookmarkMail } from './mailer';
 import { checkCredentials, getSettings, loadCredentials, putSettings, type Credentials } from './settings';
@@ -33,6 +34,11 @@ function parseId(c: AppContext): number {
   const id = Number(c.req.param('id'));
   if (!Number.isSafeInteger(id) || id <= 0) throw new BadRequest('id 不正確');
   return id;
+}
+
+/** 超過速率限制：429 加 Retry-After（秒） */
+function tooMany(c: AppContext, limit: { message: string; retryAfter: number }) {
+  return c.json({ error: limit.message }, 429, { 'Retry-After': String(limit.retryAfter) });
 }
 
 async function readJson(c: AppContext): Promise<Record<string, unknown>> {
@@ -183,6 +189,7 @@ app.post('/api/bookmarks', async (c) => {
   const result = await createBookmark(c.env, c.executionCtx, await readJson(c), new URL(c.req.url).origin);
   if (result.ok) return c.json({ bookmark: result.bookmark }, 201);
   if (result.reason === 'duplicate') return c.json({ error: '這個網址已經收藏過了', id: result.id }, 409);
+  if (result.reason === 'rate_limited') return tooMany(c, result);
   return c.json({ error: result.reason === 'invalid' ? result.message : '請求不正確' }, 400);
 });
 
@@ -194,11 +201,13 @@ app.get('/api/bookmarks/:id', async (c) => {
 app.patch('/api/bookmarks/:id', async (c) => {
   const id = parseId(c);
   const result = await editBookmark(c.env, c.executionCtx, id, await readJson(c));
+  if (!result.ok && result.reason === 'rate_limited') return tooMany(c, result);
   return result.ok ? c.json({ bookmark: result.bookmark }) : c.json({ error: '找不到書籤' }, 404);
 });
 
 app.delete('/api/bookmarks/:id', async (c) => {
   const result = await removeBookmark(c.env, c.executionCtx, parseId(c));
+  if (!result.ok && result.reason === 'rate_limited') return tooMany(c, result);
   return result.ok ? c.json({ ok: true }) : c.json({ error: '找不到書籤' }, 404);
 });
 
@@ -488,6 +497,7 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.onError((err, c) => {
   if (err instanceof BadRequest || err instanceof CrawlError || err instanceof PasskeyError) return c.json({ error: err.message }, 400);
+  if (err instanceof RateLimitError) return tooMany(c, err);
   // basicAuth 的 401 等 HTTPException 帶有自己的回應
   if (err instanceof HTTPException) return err.getResponse();
   // 同一網址同時送出兩次，第二筆撞到 UNIQUE

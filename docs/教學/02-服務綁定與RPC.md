@@ -1,6 +1,6 @@
 # 02 服務綁定與 RPC
 
-> 狀態：已實作。與下面範例的差異：RPC 另有 `overview`、`preview`、`update`、`remove`；共用流程是 `createBookmark(env, ctx, body, appUrl)`，`caller` 由 `BookmarkRpc` 寫進 Workers Logs，不進 D1；`preview` 回 `{ ok, draft, duplicateId }`；`get`、`search`、`overview` 不回 `share_id`。
+> 狀態：已實作。與下面範例的差異：RPC 另有 `overview`、`preview`、`update`、`remove`；共用流程是 `createBookmark(env, ctx, body, appUrl)`，`caller` 由 `BookmarkRpc` 寫進 Workers Logs，不進 D1；`preview` 回 `{ ok, draft, duplicateId }`；`get`、`search`、`overview` 不回 `share_id`；`preview`、`add`、`update`、`remove` 超過速率限制時回 `{ ok: false, reason: 'rate_limited', message, retryAfter }`；`add`、`update` 只取契約內的欄位，多帶的不採用；閘道只用 `search`、`get`、`overview`、`add`，`preview`、`update`、`remove` 還留在 RPC 上，等閘道部署後再移除，原因見 [06-安全與權限.md](06-安全與權限.md)〈提示注入〉。
 
 ## 概念
 
