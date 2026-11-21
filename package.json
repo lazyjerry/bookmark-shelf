@@ -9,7 +9,8 @@
     "db:migrations:local": "wrangler d1 migrations apply DB --local",
     "deploy": "npm run db:migrations:apply && wrangler deploy",
     "types": "wrangler types --strict-vars=false",
-    "typecheck": "npm run types && tsc --noEmit"
+    "typecheck": "npm run types && tsc --noEmit && tsc --noEmit -p test",
+    "test": "vitest run"
   },
   "cloudflare": {
     "bindings": {
@@ -32,7 +33,9 @@
     "hono": "^4.13.13"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.6.0",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.12",
     "wrangler": "^4.152.0"
   },
   "allowScripts": {
