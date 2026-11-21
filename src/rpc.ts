@@ -51,6 +51,13 @@ function logCall(op: string, caller: Caller | undefined, id: number | null, resu
   console.log(JSON.stringify({ message: 'rpc', op, client: caller?.client ?? '', bookmark, result: result.ok ? 'ok' : result.reason }));
 }
 
+// 與 REST 的 parseId 同一條規則。RPC 參數來自別的 Worker，型別不保證：'3' 這類值不可被資料庫當成 3
+function validId(id: unknown): id is number {
+  return typeof id === 'number' && Number.isSafeInteger(id) && id > 0;
+}
+
+const INVALID_ID = { ok: false as const, reason: 'invalid' as const, message: 'id 不正確' };
+
 export class BookmarkRpc extends WorkerEntrypoint<Env> {
   /** 與 GET /api/bookmarks 相同：limit 預設 24、上限 100 */
   async search(params: SearchParams = {}) {
@@ -61,6 +68,7 @@ export class BookmarkRpc extends WorkerEntrypoint<Env> {
   }
 
   async get(id: number) {
+    if (!validId(id)) return null;
     const bookmark = await getBookmark(this.env.DB, id);
     return bookmark ? strip(bookmark) : null;
   }
@@ -90,12 +98,14 @@ export class BookmarkRpc extends WorkerEntrypoint<Env> {
   }
 
   async update(id: number, patch: BookmarkChanges, caller: Caller) {
+    if (!validId(id)) return INVALID_ID;
     const result = await editBookmark(this.env, this.ctx, id, { ...patch });
     logCall('update', caller, id, result);
     return stripResult(result);
   }
 
   async remove(id: number, caller: Caller) {
+    if (!validId(id)) return INVALID_ID;
     const result = await removeBookmark(this.env, this.ctx, id);
     logCall('remove', caller, id, result);
     return stripResult(result);

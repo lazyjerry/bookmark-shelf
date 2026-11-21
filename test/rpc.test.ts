@@ -151,3 +151,20 @@ describe('呼叫者寫進 Workers Logs', () => {
     expect(entries).toContainEqual(expect.objectContaining({ client: 'test-client', op: 'add', bookmark: result.bookmark.id }));
   });
 });
+
+describe('id 不是正整數', () => {
+  const badIds = [0, -1, 1.5, Number.NaN, '3', null];
+
+  it('get 回 null', async () => {
+    for (const id of badIds) expect(await rpc().get(id)).toBeNull();
+  });
+
+  it('update、remove 回 { ok: false, reason: invalid }，不動到資料', async () => {
+    const created = await restAdd({ url: 'https://site.test/bad-id', title: '原標題' });
+    for (const id of badIds) {
+      expect(await rpc().update(id, { title: '被改了' }, { client: 't' })).toEqual({ ok: false, reason: 'invalid', message: 'id 不正確' });
+      expect(await rpc().remove(id, { client: 't' })).toEqual({ ok: false, reason: 'invalid', message: 'id 不正確' });
+    }
+    expect((await rpc().get(created.id)).title).toBe('原標題');
+  });
+});
