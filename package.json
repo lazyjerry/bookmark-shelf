@@ -25,6 +25,9 @@
       },
       "AI_ENABLED": {
         "description": "設為 `false` 時停用 AI，只用爬蟲結果與規則產生標題、摘要與分類。"
+      },
+      "APP_URL": {
+        "description": "選用。這個 Worker 的網址（例如 `https://<你的網域>`），經 MCP 閘道新增書籤時，通知信的連結用它；沒接 MCP 閘道可不設。"
       }
     }
   },
